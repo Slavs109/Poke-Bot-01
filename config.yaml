@@ -1,102 +1,82 @@
-# Checks every five minutes. Retailers may temporarily block repeated automated visits.
+# The GitHub workflow runs every five minutes.
+# Direct product pages are more reliable than broad search/category pages.
 check_interval_minutes: 5
-page_timeout_seconds: 30
+page_timeout_seconds: 25
 
-# You can enter the channel ID here or in the .env file.
-discord_channel_id: 0
-
-# Set searches currently enabled.
-# The $59.99 ceiling is intended to catch normal ETBs and smaller sealed products,
-# while rejecting most inflated marketplace listings. You can edit any ceiling.
 watches:
-  - name: "30th Celebration"
-    url: "https://www.pokemoncenter.com/search/30th%20Celebration"
+  # Pokémon Center still may block GitHub-hosted IPs. The code now warms the
+  # homepage first, keeps cookies in one session, and retries temporary blocks.
+  - name: "Pokémon Center 151 Elite Trainer Box"
+    retailer: "Pokémon Center"
+    url: "https://www.pokemoncenter.com/search/pokemon-151-trainer-box"
+    warmup_url: "https://www.pokemoncenter.com/"
     max_price: 59.99
     enabled: true
 
-  - name: "Mega Evolution—Pitch Black"
-    url: "https://www.pokemoncenter.com/search/Mega%20Evolution%20Pitch%20Black"
+  - name: "Pokémon Center TCG cards"
+    retailer: "Pokémon Center"
+    url: "https://www.pokemoncenter.com/category/tcg-cards?page=1"
+    warmup_url: "https://www.pokemoncenter.com/"
+    max_price: 64.99
+    enabled: true
+
+  # Target direct product pages
+  - name: "Target Scarlet & Violet 151 Elite Trainer Box"
+    url: "https://www.target.com/p/-/A-88897899"
     max_price: 59.99
     enabled: true
 
-  - name: "Mega Evolution—Chaos Rising"
-    url: "https://www.pokemoncenter.com/search/Mega%20Evolution%20Chaos%20Rising"
+  - name: "Target Prismatic Evolutions Elite Trainer Box"
+    url: "https://www.target.com/p/-/A-1010872626"
     max_price: 59.99
     enabled: true
 
-  - name: "Mega Evolution—Perfect Order"
-    url: "https://www.pokemoncenter.com/search/Mega%20Evolution%20Perfect%20Order"
+  # Walmart direct product pages. The MSRP cap prevents inflated marketplace alerts.
+  - name: "Walmart Scarlet & Violet 151 Elite Trainer Box"
+    url: "https://www.walmart.com/ip/5337897826"
     max_price: 59.99
     enabled: true
 
-  - name: "Mega Evolution—Ascended Heroes"
-    url: "https://www.pokemoncenter.com/search/Mega%20Evolution%20Ascended%20Heroes"
+  - name: "Walmart Prismatic Evolutions Pokémon Center Elite Trainer Box"
+    url: "https://www.walmart.com/ip/15036972508"
+    max_price: 64.99
+    enabled: true
+
+  # Best Buy direct product page
+  - name: "Best Buy Prismatic Evolutions Super-Premium Collection"
+    url: "https://www.bestbuy.com/product/sku/6621081"
+    max_price: 99.99
+    enabled: true
+
+  # GameStop direct product pages
+  - name: "GameStop Prismatic Evolutions Elite Trainer Box"
+    url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-prismatic-evolutions-elite-trainer-box/417631.html"
     max_price: 59.99
     enabled: true
 
-  - name: "Mega Evolution—Phantasmal Flames"
-    url: "https://www.pokemoncenter.com/search/Mega%20Evolution%20Phantasmal%20Flames"
+  - name: "GameStop Prismatic Evolutions Elite Trainer Box alternate listing"
+    url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-prismatic-evolutions-elite-trainer-box/20018505.html"
     max_price: 59.99
     enabled: true
 
-  - name: "Mega Evolution"
-    url: "https://www.pokemoncenter.com/search/Mega%20Evolution%20TCG"
+  # Additional retailer product/category pages. Keep these enabled for broader
+  # coverage; replace them with exact product URLs whenever you find a listing.
+  - name: "Costco Pokémon trading cards"
+    url: "https://www.costco.com/pokemon.html"
+    max_price: 99.99
+    enabled: true
+
+  - name: "Sam's Club Pokémon trading cards"
+    url: "https://www.samsclub.com/s/pokemon%20cards"
+    max_price: 99.99
+    enabled: true
+
+  - name: "Barnes & Noble Pokémon cards"
+    url: "https://www.barnesandnoble.com/s/pokemon%20cards"
     max_price: 59.99
     enabled: true
 
-  - name: "Scarlet & Violet—Black Bolt"
-    url: "https://www.pokemoncenter.com/search/Black%20Bolt"
-    max_price: 59.99
-    enabled: true
-
-  - name: "Scarlet & Violet—White Flare"
-    url: "https://www.pokemoncenter.com/search/White%20Flare"
-    max_price: 59.99
-    enabled: true
-
-  - name: "Scarlet & Violet—Destined Rivals"
-    url: "https://www.pokemoncenter.com/search/Destined%20Rivals"
-    max_price: 59.99
-    enabled: true
-
-  - name: "Scarlet & Violet—Journey Together"
-    url: "https://www.pokemoncenter.com/search/Journey%20Together"
-    max_price: 59.99
-    enabled: true
-
-  - name: "Scarlet & Violet—Prismatic Evolutions"
-    url: "https://www.pokemoncenter.com/search/Prismatic%20Evolutions"
-    max_price: 59.99
-    enabled: true
-
-  - name: "Scarlet & Violet—151"
-    url: "https://www.pokemoncenter.com/search/Scarlet%20Violet%20151"
-    max_price: 59.99
-    enabled: true
-
-  - name: "Scarlet & Violet—Obsidian Flames"
-    url: "https://www.pokemoncenter.com/search/Obsidian%20Flames"
-    max_price: 59.99
-    enabled: true
-
-  # Major-retailer category pages. These broaden coverage but may be less precise
-  # than direct product pages because marketplace products can appear in results.
-  - name: "Target Pokémon TCG restocks"
-    url: "https://www.target.com/c/trading-cards-toys-games/pokemon/-/N-27p31Z569t0"
-    max_price: 59.99
-    enabled: true
-
-  - name: "Walmart Pokémon TCG restocks"
-    url: "https://www.walmart.com/browse/collectibles/pokemon-cards/5967908_9807313_4252400"
-    max_price: 59.99
-    enabled: true
-
-  - name: "Best Buy Pokémon TCG restocks"
-    url: "https://www.bestbuy.com/site/searchpage.jsp?id=pcat17071&st=pokemon+cards"
-    max_price: 59.99
-    enabled: true
-
-  - name: "GameStop Pokémon TCG restocks"
-    url: "https://www.gamestop.com/search/?q=pokemon+cards"
+  - name: "SCHEELS Pokémon cards"
+    url: "https://www.scheels.com/search?q=pokemon%20cards"
     max_price: 59.99
     enabled: true
