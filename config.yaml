@@ -1,83 +1,89 @@
-# GitHub Actions runs this scan every five minutes.
-# A page only qualifies when it includes required Pokémon wording plus a cart,
-# bag, shipping, buy-now, or checkout signal.
+# Direct-product monitoring only.
+# The Discord button always opens the exact configured product page.
+# Search/category pages are intentionally excluded because they cannot provide
+# a dependable one-tap route to the item being reported.
 check_interval_minutes: 5
 page_timeout_seconds: 25
 
 watches:
-  - name: "Pokémon Center 151 products"
-    retailer: "Pokémon Center"
-    url: "https://www.pokemoncenter.com/search/pokemon-151"
-    warmup_url: "https://www.pokemoncenter.com/"
-    required_terms: ["pokemon", "151"]
-    max_price: 64.99
-    enabled: true
-
-  - name: "Pokémon Center TCG cards"
-    retailer: "Pokémon Center"
-    url: "https://www.pokemoncenter.com/category/tcg-cards?page=1"
-    warmup_url: "https://www.pokemoncenter.com/"
-    required_terms: ["pokemon"]
-    max_price: 64.99
-    enabled: true
-
-  - name: "Target Scarlet & Violet 151 Elite Trainer Box"
+  # Target first-party product pages
+  - name: "Target Pokémon 151 Elite Trainer Box"
     url: "https://www.target.com/p/-/A-88897899"
-    required_terms: ["pokemon", "151"]
+    checkout_url: "https://www.target.com/p/-/A-88897899"
+    required_terms: ["pokemon", "151", "elite trainer box"]
     max_price: 59.99
     enabled: true
 
-  - name: "Target Prismatic Evolutions Elite Trainer Box"
-    url: "https://www.target.com/p/-/A-1010872626"
-    required_terms: ["pokemon", "prismatic"]
+  - name: "Target Phantasmal Flames Elite Trainer Box"
+    url: "https://www.target.com/p/-/A-94860231"
+    checkout_url: "https://www.target.com/p/-/A-94860231"
+    required_terms: ["pokemon", "phantasmal flames", "elite trainer box"]
     max_price: 59.99
     enabled: true
 
-  - name: "Walmart Scarlet & Violet 151 Elite Trainer Box"
+  - name: "Target Twilight Masquerade Elite Trainer Box"
+    url: "https://www.target.com/p/-/A-91619960"
+    checkout_url: "https://www.target.com/p/-/A-91619960"
+    required_terms: ["pokemon", "twilight masquerade", "elite trainer box"]
+    max_price: 54.99
+    enabled: true
+
+  - name: "Target Perfect Order Elite Trainer Box"
+    url: "https://www.target.com/p/-/A-95230445"
+    checkout_url: "https://www.target.com/p/-/A-95230445"
+    required_terms: ["pokemon", "perfect order", "elite trainer box"]
+    max_price: 59.99
+    enabled: true
+
+  # Walmart product pages. These work best from the local/home runner.
+  - name: "Walmart Pokémon 151 Elite Trainer Box"
     url: "https://www.walmart.com/ip/5337897826"
+    checkout_url: "https://www.walmart.com/ip/5337897826"
     required_terms: ["pokemon", "151"]
     max_price: 59.99
     enabled: true
 
   - name: "Walmart Prismatic Evolutions Elite Trainer Box"
     url: "https://www.walmart.com/ip/15036972508"
-    required_terms: ["pokemon", "prismatic"]
-    max_price: 64.99
-    enabled: true
-
-  - name: "Best Buy Prismatic Evolutions Super-Premium Collection"
-    url: "https://www.bestbuy.com/product/sku/6621081"
-    required_terms: ["pokemon", "prismatic"]
-    max_price: 99.99
-    enabled: true
-
-  - name: "GameStop Prismatic Evolutions Elite Trainer Box"
-    url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-prismatic-evolutions-elite-trainer-box/417631.html"
+    checkout_url: "https://www.walmart.com/ip/15036972508"
     required_terms: ["pokemon", "prismatic"]
     max_price: 59.99
     enabled: true
 
-  - name: "Kohl's Stellar Crown Elite Trainer Box"
-    url: "https://www.kohls.com/product/prd-7062219/product.jsp"
-    required_terms: ["pokemon", "elite trainer box"]
+  # GameStop direct product pages
+  - name: "GameStop Scarlet and Violet Elite Trainer Box"
+    url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-scarlet-and-violet-elite-trainer-box-styles-may-vary/20020096.html"
+    checkout_url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-scarlet-and-violet-elite-trainer-box-styles-may-vary/20020096.html"
+    required_terms: ["pokemon", "scarlet and violet", "elite trainer box"]
     max_price: 59.99
     enabled: true
 
-  - name: "Kohl's Scarlet Violet 8 Booster Three-Pack"
-    url: "https://www.kohls.com/product/prd-7251768/product.jsp"
-    required_terms: ["pokemon", "booster"]
-    max_price: 29.99
+  - name: "GameStop Perfect Order Elite Trainer Box"
+    url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-perfect-order-elite-trainer-box/438990.html"
+    checkout_url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-perfect-order-elite-trainer-box/438990.html"
+    required_terms: ["pokemon", "perfect order", "elite trainer box"]
+    max_price: 59.99
     enabled: true
 
-  - name: "Staples Pokemon TCG Refuel Pack"
+  - name: "GameStop Mega Evolution Elite Trainer Box"
+    url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-mega-evolution-elite-trainer-box/428260.html"
+    checkout_url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-mega-evolution-elite-trainer-box/428260.html"
+    required_terms: ["pokemon", "mega evolution", "elite trainer box"]
+    max_price: 59.99
+    enabled: true
+
+  # Other direct retailer pages
+  - name: "Staples Pokémon TCG Refuel Pack"
     url: "https://www.staples.com/wayne-global-llc-pokemon-tcg-refuel-pack-playing-cards-10-cards-pack-wg7082025055/product_24678880"
-    required_terms: ["pokemon", "add to cart"]
+    checkout_url: "https://www.staples.com/wayne-global-llc-pokemon-tcg-refuel-pack-playing-cards-10-cards-pack-wg7082025055/product_24678880"
+    required_terms: ["pokemon", "refuel pack"]
     max_price: 9.99
     enabled: true
 
   - name: "Family Dollar assorted Pokémon trading cards"
     retailer: "Family Dollar"
     url: "https://sameday.familydollar.com/store/family-dollar/products/90941757-pokemon-trading-cards-assorted"
+    checkout_url: "https://sameday.familydollar.com/store/family-dollar/products/90941757-pokemon-trading-cards-assorted"
     required_terms: ["pokemon", "card"]
     max_price: 9.99
     enabled: true
@@ -85,54 +91,21 @@ watches:
   - name: "Family Dollar Pokémon 10-count cards"
     retailer: "Family Dollar"
     url: "https://sameday.familydollar.com/store/family-dollar/products/90941780-pokemon-10-count-trading-cards-assorted-limit-24-packs"
+    checkout_url: "https://sameday.familydollar.com/store/family-dollar/products/90941780-pokemon-10-count-trading-cards-assorted-limit-24-packs"
     required_terms: ["pokemon", "card"]
     max_price: 9.99
     enabled: true
 
-  - name: "Ace Hardware Pokémon cards"
-    url: "https://www.acehardware.com/search?query=pokemon%20cards"
-    required_terms: ["pokemon", "card"]
-    max_price: 59.99
-    enabled: true
-
   - name: "Dollar General Pokémon 15-card pack"
     url: "https://www.dollargeneral.com/p/pokemon-trading-card-game-15-card-pack-1-ct/728192558375"
-    required_terms: ["pokemon", "card"]
+    checkout_url: "https://www.dollargeneral.com/p/pokemon-trading-card-game-15-card-pack-1-ct/728192558375"
+    required_terms: ["pokemon", "15-card"]
     max_price: 12.99
     enabled: true
 
-  - name: "Five Below Pokémon trading cards"
-    url: "https://www.fivebelow.com/categories/toys-and-games/blind-bags-and-collectibles/trading-cards"
-    required_terms: ["pokemon", "add to cart"]
-    max_price: 29.99
-    enabled: true
-
-  - name: "Walgreens Pokémon products"
-    url: "https://www.walgreens.com/store/store/category/productlist.jsp?Eon=2672+310686&N=2672+310686"
-    required_terms: ["pokemon"]
-    max_price: 29.99
-    enabled: true
-
-  - name: "Costco Pokémon trading cards"
-    url: "https://www.costco.com/pokemon.html"
-    required_terms: ["pokemon"]
-    max_price: 99.99
-    enabled: true
-
-  - name: "Sam's Club Pokémon trading cards"
-    url: "https://www.samsclub.com/s/pokemon%20cards"
-    required_terms: ["pokemon"]
-    max_price: 99.99
-    enabled: true
-
-  - name: "Barnes & Noble Pokémon cards"
-    url: "https://www.barnesandnoble.com/s/pokemon%20cards"
-    required_terms: ["pokemon", "card"]
-    max_price: 59.99
-    enabled: true
-
-  - name: "SCHEELS Pokémon cards"
-    url: "https://www.scheels.com/search?q=pokemon%20cards"
-    required_terms: ["pokemon", "card"]
-    max_price: 59.99
+  - name: "Kohl's Scarlet Violet booster three-pack"
+    url: "https://www.kohls.com/product/prd-7251768/product.jsp"
+    checkout_url: "https://www.kohls.com/product/prd-7251768/product.jsp"
+    required_terms: ["pokemon", "booster"]
+    max_price: 24.99
     enabled: true
