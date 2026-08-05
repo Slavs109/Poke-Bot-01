@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import requests
 import yaml
@@ -25,7 +25,8 @@ OUT_OF_STOCK = (
     "coming soon", "notify me when available"
 )
 IN_STOCK = (
-    "add to cart", "add to bag", "ship it", "buy now", "in stock"
+    "add to cart", "add to bag", "ship it", "buy now", "in stock",
+    "available for shipping", "available for pickup"
 )
 
 RETAILERS = {
@@ -38,7 +39,22 @@ RETAILERS = {
     "barnesandnoble.com": "Barnes & Noble",
     "costco.com": "Costco",
     "samsclub.com": "Sam's Club",
+    "acehardware.com": "Ace Hardware",
     "scheels.com": "SCHEELS",
+    "walgreens.com": "Walgreens",
+    "cvs.com": "CVS",
+    "bjs.com": "BJ's Wholesale Club",
+    "meijer.com": "Meijer",
+    "kroger.com": "Kroger",
+    "fredmeyer.com": "Fred Meyer",
+    "macys.com": "Macy's",
+    "fivebelow.com": "Five Below",
+    "dollargeneral.com": "Dollar General",
+    "familydollar.com": "Family Dollar",
+    "hottopic.com": "Hot Topic",
+    "boxlunch.com": "BoxLunch",
+    "academy.com": "Academy Sports + Outdoors",
+    "dickssportinggoods.com": "DICK'S Sporting Goods",
 }
 
 HEADERS = {
@@ -59,7 +75,7 @@ class Result:
     price: float | None
     in_stock: bool
     evidence: str
-    cart_url: str
+    checkout_url: str
 
 
 def load_json(path: Path, default: Any) -> Any:
@@ -107,7 +123,19 @@ def iter_jsonld(value: Any):
             yield from iter_jsonld(item)
 
 
-def parse_jsonld(soup: BeautifulSoup) -> tuple[str | None, float | None, bool | None]:
+def normalize_url(base_url: str, candidate: Any) -> str | None:
+    if not isinstance(candidate, str) or not candidate.strip():
+        return None
+    value = urljoin(base_url, candidate.strip())
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    return value
+
+
+def parse_jsonld(
+    soup: BeautifulSoup, base_url: str
+) -> tuple[str | None, float | None, bool | None, str | None]:
     for script in soup.select('script[type="application/ld+json"]'):
         try:
             raw = script.string or script.get_text(" ", strip=True)
@@ -131,24 +159,48 @@ def parse_jsonld(soup: BeautifulSoup) -> tuple[str | None, float | None, bool | 
             stock = None
             if availability:
                 stock = "instock" in availability and "outofstock" not in availability
-            return item.get("name"), price, stock
-    return None, None, None
+            product_url = (
+                normalize_url(base_url, offers.get("url"))
+                or normalize_url(base_url, item.get("url"))
+            )
+            return item.get("name"), price, stock, product_url
+    return None, None, None, None
+
+
+def best_page_url(soup: BeautifulSoup, response_url: str) -> str:
+    canonical = soup.select_one('link[rel~="canonical"][href]')
+    if canonical:
+        value = normalize_url(response_url, canonical.get("href"))
+        if value:
+            return value
+    og_url = soup.select_one('meta[property="og:url"][content]')
+    if og_url:
+        value = normalize_url(response_url, og_url.get("content"))
+        if value:
+            return value
+    return response_url
 
 
 def inspect(item: dict[str, Any]) -> Result:
     name = str(item["name"])
     url = str(item["url"])
     retailer = retailer_name(url, item.get("retailer"))
-    cart_url = str(item.get("cart_url") or url)
+    configured_checkout = item.get("checkout_url") or item.get("cart_url")
     response = requests.get(url, headers=HEADERS, timeout=TIMEOUT, allow_redirects=True)
     response.raise_for_status()
     soup = BeautifulSoup(response.text, "html.parser")
     text = soup.get_text(" ", strip=True).lower()
-    ld_name, ld_price, ld_stock = parse_jsonld(soup)
+    ld_name, ld_price, ld_stock, ld_url = parse_jsonld(soup, response.url)
     price = ld_price if ld_price is not None else parse_price(text)
+    product_url = ld_url or best_page_url(soup, response.url)
+    checkout_url = (
+        normalize_url(response.url, configured_checkout)
+        if configured_checkout
+        else product_url
+    ) or product_url
 
-    out_hits = [p for p in OUT_OF_STOCK if p in text]
-    in_hits = [p for p in IN_STOCK if p in text]
+    out_hits = [phrase for phrase in OUT_OF_STOCK if phrase in text]
+    in_hits = [phrase for phrase in IN_STOCK if phrase in text]
     if ld_stock is not None:
         in_stock = ld_stock
         evidence = "structured product availability"
@@ -159,7 +211,15 @@ def inspect(item: dict[str, Any]) -> Result:
         in_stock = bool(in_hits)
         evidence = in_hits[0] if in_hits else "no purchase signal found"
 
-    return Result(ld_name or name, response.url, retailer, price, in_stock, evidence, cart_url)
+    return Result(
+        ld_name or name,
+        product_url,
+        retailer,
+        price,
+        in_stock,
+        evidence,
+        checkout_url,
+    )
 
 
 def state_key(item: dict[str, Any]) -> str:
@@ -168,7 +228,7 @@ def state_key(item: dict[str, Any]) -> str:
 
 def state_signature(result: Result) -> str:
     price = "none" if result.price is None else f"{result.price:.2f}"
-    return f"{int(result.in_stock)}|{price}"
+    return f"{int(result.in_stock)}|{price}|{result.checkout_url}"
 
 
 def send_alert(result: Result, max_price: float) -> None:
@@ -179,23 +239,28 @@ def send_alert(result: Result, max_price: float) -> None:
         "username": "Pokémon MSRP Alerts",
         "embeds": [{
             "title": f"IN STOCK: {result.name}",
-            "url": result.cart_url,
-            "description": "Open the button below to continue toward checkout.",
+            "url": result.url,
+            "description": (
+                "Open the button below to go directly to the retailer's product, "
+                "cart, or checkout page."
+            ),
             "color": 5763719,
             "fields": [
                 {"name": "Retailer", "value": result.retailer, "inline": True},
                 {"name": "Price", "value": price, "inline": True},
                 {"name": "Maximum", "value": f"${max_price:.2f}", "inline": True},
             ],
-            "footer": {"text": "Confirm seller, price, shipping, and quantity before purchasing."},
+            "footer": {
+                "text": "Confirm seller, price, shipping, membership, and quantity before buying."
+            },
         }],
         "components": [{
             "type": 1,
             "components": [{
                 "type": 2,
                 "style": 5,
-                "label": "ADD TO CART / CHECKOUT",
-                "url": result.cart_url,
+                "label": "OPEN PRODUCT / CHECKOUT",
+                "url": result.checkout_url,
             }],
         }],
     }
@@ -219,7 +284,10 @@ def main() -> int:
             signature = state_signature(result)
             eligible = result.in_stock and result.price is not None and result.price <= maximum
             changed = previous.get(key) != signature
-            print(f"{result.retailer}: {result.name} | stock={result.in_stock} | price={result.price} | {result.evidence}")
+            print(
+                f"{result.retailer}: {result.name} | stock={result.in_stock} | "
+                f"price={result.price} | {result.evidence} | link={result.checkout_url}"
+            )
             if eligible and changed:
                 send_alert(result, maximum)
                 print("  Alert sent")

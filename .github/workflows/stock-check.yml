@@ -2,6 +2,18 @@ name: Pokemon MSRP Stock Check
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "check_stock.py"
+      - "config.yaml"
+      - "requirements.txt"
+      - "test_check_stock.py"
+      - ".github/workflows/stock-check.yml"
+  pull_request:
+    branches:
+      - main
   schedule:
     - cron: "*/5 * * * *"
 
@@ -9,11 +21,35 @@ permissions:
   contents: write
 
 concurrency:
-  group: pokemon-msrp-stock-check
+  group: pokemon-msrp-stock-check-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install requirements
+        run: python -m pip install -r requirements.txt
+
+      - name: Compile stock checker
+        run: python -m py_compile check_stock.py test_check_stock.py
+
+      - name: Run unit tests
+        run: python -m unittest -v
+
   check-stock:
+    if: github.event_name != 'pull_request'
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -30,6 +66,30 @@ jobs:
 
       - name: Install requirements
         run: python -m pip install -r requirements.txt
+
+      - name: Send live confirmation
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          python - <<'PY'
+          import os
+          import requests
+
+          webhook = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+          if not webhook:
+              raise SystemExit("DISCORD_WEBHOOK_URL secret is missing")
+
+          response = requests.post(
+              webhook,
+              json={
+                  "username": "Pokémon MSRP Alerts",
+                  "content": "✅ Pokémon stock bot is live. Starting a full stock check now."
+              },
+              timeout=25,
+          )
+          response.raise_for_status()
+          PY
 
       - name: Check stock and send Discord alerts
         env:
