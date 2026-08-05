@@ -13,6 +13,7 @@ import requests
 import yaml
 
 import check_stock
+import target_inventory
 
 CONFIG_PATH = Path(os.getenv("CONFIG_PATH", "config.yaml"))
 STATE_PATH = Path(os.getenv("STATE_PATH", "state.json"))
@@ -74,19 +75,41 @@ def send_report(pokemon_center: tuple[str, str], stores: dict[str, list[str]], c
         json={
             "username": "Pokémon MSRP Alerts",
             "embeds": [{
-                "title": "Pokémon MSRP store report",
+                "title": "Pokémon MSRP and local inventory report",
                 "description": (
-                    f"Local search area: ZIP {zips}, within {radius} miles. "
-                    "Each result names the retailer and search area. Exact branch names or quantities are only shown when the retailer exposes them publicly."
+                    f"Inventory area: ZIP {zips}, within {radius} miles. "
+                    "Target uses TCIN-based nearby-store checks. Reported quantities are estimates and can change before arrival."
                 ),
                 "color": 3447003,
                 "fields": fields[:25],
-                "footer": {"text": "Walmart checks work best from the home-network runner. Marketplace prices above your limit are ignored."},
+                "footer": {"text": "Use the direct item link to confirm pickup and complete checkout."},
             }],
         },
         timeout=TIMEOUT,
     )
     response.raise_for_status()
+
+
+def target_lines(item: dict[str, Any], config: dict[str, Any]) -> list[str]:
+    local = config.get("local_inventory", {})
+    zip_codes = [str(value) for value in local.get("zip_codes", [])]
+    radius = int(local.get("radius_miles", 25))
+    max_stores = int(local.get("max_stores_per_item", 8))
+    message, inventory = target_inventory.lookup_target(item, zip_codes, radius)
+    direct = str(item.get("checkout_url") or item["url"])
+    available = [entry for entry in inventory if entry.pickup or entry.quantity and entry.quantity > 0]
+    if not available:
+        return [f"➖ **No local pickup found** — [{item['name']}]({direct})\n{message}"]
+
+    lines: list[str] = []
+    for entry in available[:max_stores]:
+        quantity = f" — reported qty {entry.quantity}" if entry.quantity is not None else ""
+        distance = f" — {entry.distance_miles:.1f} mi" if entry.distance_miles is not None else ""
+        lines.append(
+            f"🏪 **{entry.store_name}** — {entry.status}{quantity}{distance}\n"
+            f"{entry.address}\n[{item['name']}]({direct})"
+        )
+    return lines
 
 
 def main() -> int:
@@ -107,6 +130,9 @@ def main() -> int:
         location = str(item.get("location_scope", "Location not exposed"))
         key = check_stock.state_key(item)
         try:
+            if item.get("inventory_provider") == "target":
+                stores[store].extend(target_lines(item, config))
+
             result = check_stock.inspect(item)
             maximum = float(item["max_price"])
             eligible = result.in_stock and result.price is not None and result.price <= maximum
@@ -115,11 +141,11 @@ def main() -> int:
             price = "unknown price" if result.price is None else f"${result.price:.2f}"
 
             if eligible:
-                stores[store].append(f"✅ **FOUND** — [{result.name}]({result.checkout_url}) — {price}\n📍 {location}")
+                stores[store].append(f"✅ **ONLINE FOUND** — [{result.name}]({result.checkout_url}) — {price}\n📍 {location}")
                 if changed:
                     check_stock.send_alert(result, maximum)
                     print(f"Alert sent: {store} | {result.name}")
-            else:
+            elif item.get("inventory_provider") != "target":
                 stores[store].append(f"➖ Nothing found — [{name}]({item['checkout_url']})\n📍 {location}\nReason: {result.evidence}")
 
             current[key] = signature
@@ -132,7 +158,7 @@ def main() -> int:
             print(f"TIMEOUT {store}: {exc}", file=sys.stderr)
         except Exception as exc:
             failures += 1
-            stores[store].append(f"⚠️ Error — [{name}]({item['checkout_url']})\n📍 {location}")
+            stores[store].append(f"⚠️ Inventory unavailable — [{name}]({item['checkout_url']})\n📍 {location}\n{str(exc)[:160]}")
             print(f"ERROR {store}: {exc}", file=sys.stderr)
         time.sleep(1)
 

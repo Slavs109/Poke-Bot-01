@@ -5,11 +5,12 @@ page_timeout_seconds: 25
 local_inventory:
   zip_codes: ["75043", "75217"]
   radius_miles: 25
-  note: "The report names the retailer and ZIP search area. Exact branch and quantity are shown only when a retailer exposes them publicly."
+  max_stores_per_item: 8
+  note: "Target inventory is checked directly by TCIN, ZIP, and radius when Target exposes its public web inventory response. Quantities are reported as estimates, not guarantees."
 
 restock_guidance:
   pokemon_center: "No published schedule; monitor continuously."
-  target: "No official fixed schedule; use product-page store availability and app notifications."
+  target: "No official fixed schedule; local inventory is checked by TCIN every scan."
   walmart: "No reliable published card-restock schedule; monitor continuously from the home runner."
 
 alert_settings:
@@ -21,7 +22,9 @@ alert_settings:
 watches:
   - name: "Target Pokémon 151 Elite Trainer Box"
     retailer: "Target"
-    location_scope: "Stores near 75043 and 75217"
+    inventory_provider: "target"
+    tcin: "88897899"
+    location_scope: "Target stores within 25 miles of 75043 and 75217"
     set: "151"
     priority: 1
     first_party: true
@@ -33,7 +36,9 @@ watches:
 
   - name: "Target Ascended Heroes Elite Trainer Box"
     retailer: "Target"
-    location_scope: "Stores near 75043 and 75217"
+    inventory_provider: "target"
+    tcin: "95082118"
+    location_scope: "Target stores within 25 miles of 75043 and 75217"
     set: "Ascended Heroes"
     priority: 2
     first_party: true
@@ -45,7 +50,9 @@ watches:
 
   - name: "Target Perfect Order Elite Trainer Box"
     retailer: "Target"
-    location_scope: "Stores near 75043 and 75217"
+    inventory_provider: "target"
+    tcin: "95230445"
+    location_scope: "Target stores within 25 miles of 75043 and 75217"
     set: "Perfect Order"
     priority: 2
     first_party: true

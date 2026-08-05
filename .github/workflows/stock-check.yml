@@ -7,7 +7,7 @@ on:
       - main
     paths:
       - "check_stock.py"
-      - "enhanced_check.py"
+      - "target_inventory.py"
       - "store_report.py"
       - "queue_monitor.py"
       - "run_forever.py"
@@ -48,7 +48,7 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Compile stock checker
-        run: python -m py_compile check_stock.py enhanced_check.py store_report.py queue_monitor.py run_forever.py test_check_stock.py
+        run: python -m py_compile check_stock.py target_inventory.py store_report.py queue_monitor.py run_forever.py test_check_stock.py
 
       - name: Run unit tests
         run: python -m unittest -v
@@ -93,7 +93,7 @@ jobs:
               webhook,
               json={
                   "username": "Pokémon MSRP Alerts",
-                  "content": "✅ Pokémon bot updated: checking Obsidian Flames, Ascended Heroes, priorities, quality, and direct item pages."
+                  "content": "✅ Pokémon bot updated: checking Target TCIN inventory near 75043 and 75217 plus direct online product pages."
               },
               timeout=25,
           )
@@ -106,22 +106,22 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python queue_monitor.py
 
-      - name: Check prioritized products and send quality report
+      - name: Check online and local store inventory
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          SEND_RUN_SUMMARY: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
+          FORCE_REPORT: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
           PAGE_TIMEOUT_SECONDS: "25"
-        run: python enhanced_check.py
+        run: python store_report.py
 
       - name: Save alert state
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state.json queue_state.json
+          git add state.json queue_state.json report_state.json
           if git diff --cached --quiet; then
             echo "No state change"
           else
-            git commit -m "Update stock and queue state [skip ci]"
+            git commit -m "Update stock, queue, and inventory report state [skip ci]"
             git pull --rebase origin "${GITHUB_REF_NAME}"
             git push
           fi
