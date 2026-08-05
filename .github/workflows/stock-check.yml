@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - "check_stock.py"
+      - "store_report.py"
       - "queue_monitor.py"
       - "run_forever.py"
       - "Dockerfile"
@@ -46,7 +47,7 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Compile stock checker
-        run: python -m py_compile check_stock.py queue_monitor.py run_forever.py test_check_stock.py
+        run: python -m py_compile check_stock.py store_report.py queue_monitor.py run_forever.py test_check_stock.py
 
       - name: Run unit tests
         run: python -m unittest -v
@@ -92,7 +93,7 @@ jobs:
               webhook,
               json={
                   "username": "Pokémon MSRP Alerts",
-                  "content": "✅ Pokémon stock bot is live. Checking the Pokémon Center queue and all configured stores now."
+                  "content": "✅ Pokémon stock bot is live. Checking Pokémon Center and direct product pages now."
               },
               timeout=25,
           )
@@ -105,22 +106,22 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python queue_monitor.py
 
-      - name: Check stock and send Discord alerts
+      - name: Check stores and send detailed report
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          SEND_RUN_SUMMARY: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
+          FORCE_REPORT: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
           PAGE_TIMEOUT_SECONDS: "25"
-        run: python check_stock.py
+        run: python store_report.py
 
-      - name: Save alert state
+      - name: Save alert and report state
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state.json queue_state.json
+          git add state.json queue_state.json report_state.json
           if git diff --cached --quiet; then
             echo "No state change"
           else
-            git commit -m "Update stock and queue alert state [skip ci]"
+            git commit -m "Update stock, queue, and report state [skip ci]"
             git pull --rebase origin "${GITHUB_REF_NAME}"
             git push
           fi
