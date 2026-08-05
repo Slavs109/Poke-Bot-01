@@ -1,20 +1,44 @@
 # Direct-product monitoring only.
 # The Discord report shows each store and includes exact product links for finds.
-# Walmart is intentionally excluded from the GitHub-hosted scan because it
-# consistently redirects shared GitHub IP addresses to a blocked page.
 check_interval_minutes: 5
 page_timeout_seconds: 25
 
+local_inventory:
+  zip_codes: ["75043", "75217"]
+  radius_miles: 25
+  note: "Pickup status is reported only when the retailer exposes it on the product page. Exact store-level quantities usually require a signed-in browser session or retailer API."
+
+alert_settings:
+  minimum_quality_stars: 4
+  priority_1_sets: ["151", "Prismatic Evolutions", "30th Anniversary"]
+  priority_2_sets: ["Obsidian Flames", "Ascended Heroes", "Mega Evolution", "Perfect Order"]
+  priority_3_sets: ["Other Pokémon TCG"]
+
 watches:
-  # Target first-party product pages
   - name: "Target Pokémon 151 Elite Trainer Box"
+    set: "151"
+    priority: 1
+    first_party: true
     url: "https://www.target.com/p/-/A-88897899"
     checkout_url: "https://www.target.com/p/-/A-88897899"
     required_terms: ["pokemon", "151", "elite trainer box"]
     max_price: 59.99
     enabled: true
 
+  - name: "Target Ascended Heroes Elite Trainer Box"
+    set: "Ascended Heroes"
+    priority: 2
+    first_party: true
+    url: "https://www.target.com/p/-/A-95082118"
+    checkout_url: "https://www.target.com/p/-/A-95082118"
+    required_terms: ["pokemon", "ascended heroes", "elite trainer box"]
+    max_price: 59.99
+    enabled: true
+
   - name: "Target Phantasmal Flames Elite Trainer Box"
+    set: "Phantasmal Flames"
+    priority: 3
+    first_party: true
     url: "https://www.target.com/p/-/A-94860231"
     checkout_url: "https://www.target.com/p/-/A-94860231"
     required_terms: ["pokemon", "phantasmal flames", "elite trainer box"]
@@ -22,6 +46,9 @@ watches:
     enabled: true
 
   - name: "Target Twilight Masquerade Elite Trainer Box"
+    set: "Twilight Masquerade"
+    priority: 3
+    first_party: true
     url: "https://www.target.com/p/-/A-91619960"
     checkout_url: "https://www.target.com/p/-/A-91619960"
     required_terms: ["pokemon", "twilight masquerade", "elite trainer box"]
@@ -29,14 +56,29 @@ watches:
     enabled: true
 
   - name: "Target Perfect Order Elite Trainer Box"
+    set: "Perfect Order"
+    priority: 2
+    first_party: true
     url: "https://www.target.com/p/-/A-95230445"
     checkout_url: "https://www.target.com/p/-/A-95230445"
     required_terms: ["pokemon", "perfect order", "elite trainer box"]
     max_price: 59.99
     enabled: true
 
-  # GameStop direct product pages
+  - name: "GameStop Obsidian Flames Elite Trainer Box"
+    set: "Obsidian Flames"
+    priority: 2
+    first_party: true
+    url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-scarlet-and-violet---obsidian-flames-elite-trainer-box/20020098.html"
+    checkout_url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-scarlet-and-violet---obsidian-flames-elite-trainer-box/20020098.html"
+    required_terms: ["pokemon", "obsidian flames", "elite trainer box"]
+    max_price: 49.99
+    enabled: true
+
   - name: "GameStop Scarlet and Violet Elite Trainer Box"
+    set: "Scarlet and Violet"
+    priority: 3
+    first_party: true
     url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-scarlet-and-violet-elite-trainer-box-styles-may-vary/20020096.html"
     checkout_url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-scarlet-and-violet-elite-trainer-box-styles-may-vary/20020096.html"
     required_terms: ["pokemon", "scarlet and violet", "elite trainer box"]
@@ -44,6 +86,9 @@ watches:
     enabled: true
 
   - name: "GameStop Perfect Order Elite Trainer Box"
+    set: "Perfect Order"
+    priority: 2
+    first_party: true
     url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-perfect-order-elite-trainer-box/438990.html"
     checkout_url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-perfect-order-elite-trainer-box/438990.html"
     required_terms: ["pokemon", "perfect order", "elite trainer box"]
@@ -51,14 +96,19 @@ watches:
     enabled: true
 
   - name: "GameStop Mega Evolution Elite Trainer Box"
+    set: "Mega Evolution"
+    priority: 2
+    first_party: true
     url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-mega-evolution-elite-trainer-box/428260.html"
     checkout_url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-mega-evolution-elite-trainer-box/428260.html"
     required_terms: ["pokemon", "mega evolution", "elite trainer box"]
     max_price: 59.99
     enabled: true
 
-  # Other direct retailer pages
   - name: "Staples Pokémon TCG Refuel Pack"
+    set: "Other Pokémon TCG"
+    priority: 3
+    first_party: true
     url: "https://www.staples.com/wayne-global-llc-pokemon-tcg-refuel-pack-playing-cards-10-cards-pack-wg7082025055/product_24678880"
     checkout_url: "https://www.staples.com/wayne-global-llc-pokemon-tcg-refuel-pack-playing-cards-10-cards-pack-wg7082025055/product_24678880"
     required_terms: ["pokemon", "refuel pack"]
@@ -66,6 +116,9 @@ watches:
     enabled: true
 
   - name: "Family Dollar assorted Pokémon trading cards"
+    set: "Other Pokémon TCG"
+    priority: 3
+    first_party: true
     retailer: "Family Dollar"
     url: "https://sameday.familydollar.com/store/family-dollar/products/90941757-pokemon-trading-cards-assorted"
     checkout_url: "https://sameday.familydollar.com/store/family-dollar/products/90941757-pokemon-trading-cards-assorted"
@@ -74,6 +127,9 @@ watches:
     enabled: true
 
   - name: "Family Dollar Pokémon 10-count cards"
+    set: "Other Pokémon TCG"
+    priority: 3
+    first_party: true
     retailer: "Family Dollar"
     url: "https://sameday.familydollar.com/store/family-dollar/products/90941780-pokemon-10-count-trading-cards-assorted-limit-24-packs"
     checkout_url: "https://sameday.familydollar.com/store/family-dollar/products/90941780-pokemon-10-count-trading-cards-assorted-limit-24-packs"
@@ -82,6 +138,9 @@ watches:
     enabled: true
 
   - name: "Dollar General Pokémon 15-card pack"
+    set: "Other Pokémon TCG"
+    priority: 3
+    first_party: true
     url: "https://www.dollargeneral.com/p/pokemon-trading-card-game-15-card-pack-1-ct/728192558375"
     checkout_url: "https://www.dollargeneral.com/p/pokemon-trading-card-game-15-card-pack-1-ct/728192558375"
     required_terms: ["pokemon", "15-card"]
@@ -89,6 +148,9 @@ watches:
     enabled: true
 
   - name: "Kohl's Scarlet Violet booster three-pack"
+    set: "Other Pokémon TCG"
+    priority: 3
+    first_party: true
     url: "https://www.kohls.com/product/prd-7251768/product.jsp"
     checkout_url: "https://www.kohls.com/product/prd-7251768/product.jsp"
     required_terms: ["pokemon", "booster"]
