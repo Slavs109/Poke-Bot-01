@@ -1,7 +1,7 @@
 # Direct-product monitoring only.
-# The Discord button always opens the exact configured product page.
-# Search/category pages are intentionally excluded because they cannot provide
-# a dependable one-tap route to the item being reported.
+# The Discord report shows each store and includes exact product links for finds.
+# Walmart is intentionally excluded from the GitHub-hosted scan because it
+# consistently redirects shared GitHub IP addresses to a blocked page.
 check_interval_minutes: 5
 page_timeout_seconds: 25
 
@@ -32,21 +32,6 @@ watches:
     url: "https://www.target.com/p/-/A-95230445"
     checkout_url: "https://www.target.com/p/-/A-95230445"
     required_terms: ["pokemon", "perfect order", "elite trainer box"]
-    max_price: 59.99
-    enabled: true
-
-  # Walmart product pages. These work best from the local/home runner.
-  - name: "Walmart Pokémon 151 Elite Trainer Box"
-    url: "https://www.walmart.com/ip/5337897826"
-    checkout_url: "https://www.walmart.com/ip/5337897826"
-    required_terms: ["pokemon", "151"]
-    max_price: 59.99
-    enabled: true
-
-  - name: "Walmart Prismatic Evolutions Elite Trainer Box"
-    url: "https://www.walmart.com/ip/15036972508"
-    checkout_url: "https://www.walmart.com/ip/15036972508"
-    required_terms: ["pokemon", "prismatic"]
     max_price: 59.99
     enabled: true
 
