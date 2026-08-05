@@ -40,16 +40,11 @@ def check_pokemon_center() -> tuple[str, str]:
     try:
         session = requests.Session()
         session.headers.update(check_stock.HEADERS)
-        response = session.get(
-            "https://www.pokemoncenter.com/",
-            timeout=TIMEOUT,
-            allow_redirects=True,
-        )
+        response = session.get("https://www.pokemoncenter.com/", timeout=TIMEOUT, allow_redirects=True)
         if response.status_code in {403, 429}:
             return "BLOCKED", f"HTTP {response.status_code}; queue active: {queue_active}"
         response.raise_for_status()
-        queue_text = "active" if queue_active else "not detected"
-        return "REACHABLE", f"HTTP {response.status_code}; queue {queue_text}"
+        return "REACHABLE", f"HTTP {response.status_code}; queue {'active' if queue_active else 'not detected'}"
     except requests.Timeout:
         return "TIMED OUT", f"No response within {TIMEOUT}s"
     except requests.RequestException as exc:
@@ -57,25 +52,22 @@ def check_pokemon_center() -> tuple[str, str]:
 
 
 def report_signature(pokemon_center: tuple[str, str], stores: dict[str, list[str]]) -> str:
-    payload = {"pokemon_center": pokemon_center, "stores": stores}
-    encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
+    encoded = json.dumps({"pokemon_center": pokemon_center, "stores": stores}, sort_keys=True).encode()
     return hashlib.sha256(encoded).hexdigest()
 
 
-def send_report(pokemon_center: tuple[str, str], stores: dict[str, list[str]]) -> None:
+def send_report(pokemon_center: tuple[str, str], stores: dict[str, list[str]], config: dict[str, Any]) -> None:
     if not WEBHOOK_URL:
         raise RuntimeError("DISCORD_WEBHOOK_URL secret is missing")
 
     status, detail = pokemon_center
-    fields = [{
-        "name": f"Pokémon Center — {status}",
-        "value": detail[:1024],
-        "inline": False,
-    }]
+    local = config.get("local_inventory", {})
+    zips = ", ".join(str(z) for z in local.get("zip_codes", [])) or "not configured"
+    radius = local.get("radius_miles", "?")
+    fields = [{"name": f"Pokémon Center — {status}", "value": detail[:1024], "inline": False}]
 
     for store in sorted(stores):
-        value = "\n".join(stores[store])[:1024]
-        fields.append({"name": store, "value": value or "No results", "inline": False})
+        fields.append({"name": store, "value": "\n".join(stores[store])[:1024] or "No results", "inline": False})
 
     response = requests.post(
         WEBHOOK_URL,
@@ -84,11 +76,12 @@ def send_report(pokemon_center: tuple[str, str], stores: dict[str, list[str]]) -
             "embeds": [{
                 "title": "Pokémon MSRP store report",
                 "description": (
-                    "Direct product checks only. A FOUND result includes the exact item link. "
-                    "Blocked and timed-out stores are shown instead of being treated as stock results."
+                    f"Local search area: ZIP {zips}, within {radius} miles. "
+                    "Each result names the retailer and search area. Exact branch names or quantities are only shown when the retailer exposes them publicly."
                 ),
                 "color": 3447003,
                 "fields": fields[:25],
+                "footer": {"text": "Walmart checks work best from the home-network runner. Marketplace prices above your limit are ignored."},
             }],
         },
         timeout=TIMEOUT,
@@ -111,6 +104,7 @@ def main() -> int:
             continue
         name = str(item.get("name", "Unknown item"))
         store = check_stock.retailer_name(str(item["url"]), item.get("retailer"))
+        location = str(item.get("location_scope", "Location not exposed"))
         key = check_stock.state_key(item)
         try:
             result = check_stock.inspect(item)
@@ -121,27 +115,24 @@ def main() -> int:
             price = "unknown price" if result.price is None else f"${result.price:.2f}"
 
             if eligible:
-                stores[store].append(
-                    f"✅ **FOUND** — [{result.name}]({result.checkout_url}) — {price}"
-                )
+                stores[store].append(f"✅ **FOUND** — [{result.name}]({result.checkout_url}) — {price}\n📍 {location}")
                 if changed:
                     check_stock.send_alert(result, maximum)
                     print(f"Alert sent: {store} | {result.name}")
             else:
-                reason = result.evidence
-                stores[store].append(f"➖ Nothing found — {name} ({reason})")
+                stores[store].append(f"➖ Nothing found — [{name}]({item['checkout_url']})\n📍 {location}\nReason: {result.evidence}")
 
             current[key] = signature
             print(f"{store}: eligible={eligible} price={result.price} link={result.checkout_url}")
         except check_stock.RetailerBlockedError as exc:
-            stores[store].append(f"🚫 Blocked — {name}")
+            stores[store].append(f"🚫 Blocked — [{name}]({item['checkout_url']})\n📍 {location}")
             print(f"BLOCKED {store}: {exc}", file=sys.stderr)
         except TimeoutError as exc:
-            stores[store].append(f"⏱️ Timed out — {name}")
+            stores[store].append(f"⏱️ Timed out — [{name}]({item['checkout_url']})\n📍 {location}")
             print(f"TIMEOUT {store}: {exc}", file=sys.stderr)
         except Exception as exc:
             failures += 1
-            stores[store].append(f"⚠️ Error — {name}")
+            stores[store].append(f"⚠️ Error — [{name}]({item['checkout_url']})\n📍 {location}")
             print(f"ERROR {store}: {exc}", file=sys.stderr)
         time.sleep(1)
 
@@ -149,12 +140,11 @@ def main() -> int:
     signature = report_signature(pokemon_center, dict(stores))
     old_report = load_json(REPORT_STATE_PATH, {}).get("signature")
     if FORCE_REPORT or signature != old_report:
-        send_report(pokemon_center, dict(stores))
+        send_report(pokemon_center, dict(stores), config)
         print("Store report sent")
     else:
         print("Store report unchanged; Discord summary skipped")
     save_json(REPORT_STATE_PATH, {"signature": signature})
-
     return 0 if failures < 3 else 1
 
 
