@@ -51,7 +51,7 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -79,7 +79,6 @@ jobs:
           webhook = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
           if not webhook:
               raise SystemExit("DISCORD_WEBHOOK_URL secret is missing")
-
           response = requests.post(
               webhook,
               json={
@@ -94,6 +93,8 @@ jobs:
       - name: Check stock and send Discord alerts
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SEND_RUN_SUMMARY: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
+          PAGE_TIMEOUT_SECONDS: "25"
         run: python check_stock.py
 
       - name: Save alert state
