@@ -2,6 +2,15 @@ name: Pokemon MSRP Stock Check
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "check_stock.py"
+      - "config.yaml"
+      - "requirements.txt"
+      - "test_check_stock.py"
+      - ".github/workflows/stock-check.yml"
   pull_request:
     branches:
       - main
@@ -57,6 +66,30 @@ jobs:
 
       - name: Install requirements
         run: python -m pip install -r requirements.txt
+
+      - name: Send live confirmation
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          python - <<'PY'
+          import os
+          import requests
+
+          webhook = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+          if not webhook:
+              raise SystemExit("DISCORD_WEBHOOK_URL secret is missing")
+
+          response = requests.post(
+              webhook,
+              json={
+                  "username": "Pokémon MSRP Alerts",
+                  "content": "✅ Pokémon stock bot is live. Starting a full stock check now."
+              },
+              timeout=25,
+          )
+          response.raise_for_status()
+          PY
 
       - name: Check stock and send Discord alerts
         env:
