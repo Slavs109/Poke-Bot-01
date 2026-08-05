@@ -1,11 +1,11 @@
 # The GitHub workflow runs every five minutes.
-# Direct product pages are more reliable than broad search/category pages.
+# Direct product pages are preferred over broad searches.
 check_interval_minutes: 5
 page_timeout_seconds: 25
 
 watches:
-  # Pokémon Center still may block GitHub-hosted IPs. The code now warms the
-  # homepage first, keeps cookies in one session, and retries temporary blocks.
+  # Pokémon Center product/category checks. The separate queue monitor alerts when
+  # the official site activates its virtual waiting room.
   - name: "Pokémon Center 151 Elite Trainer Box"
     retailer: "Pokémon Center"
     url: "https://www.pokemoncenter.com/search/pokemon-151-trainer-box"
@@ -20,7 +20,6 @@ watches:
     max_price: 64.99
     enabled: true
 
-  # Target direct product pages
   - name: "Target Scarlet & Violet 151 Elite Trainer Box"
     url: "https://www.target.com/p/-/A-88897899"
     max_price: 59.99
@@ -31,7 +30,6 @@ watches:
     max_price: 59.99
     enabled: true
 
-  # Walmart direct product pages. The MSRP cap prevents inflated marketplace alerts.
   - name: "Walmart Scarlet & Violet 151 Elite Trainer Box"
     url: "https://www.walmart.com/ip/5337897826"
     max_price: 59.99
@@ -42,13 +40,11 @@ watches:
     max_price: 64.99
     enabled: true
 
-  # Best Buy direct product page
   - name: "Best Buy Prismatic Evolutions Super-Premium Collection"
     url: "https://www.bestbuy.com/product/sku/6621081"
     max_price: 99.99
     enabled: true
 
-  # GameStop direct product pages
   - name: "GameStop Prismatic Evolutions Elite Trainer Box"
     url: "https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-prismatic-evolutions-elite-trainer-box/417631.html"
     max_price: 59.99
@@ -59,8 +55,59 @@ watches:
     max_price: 59.99
     enabled: true
 
-  # Additional retailer product/category pages. Keep these enabled for broader
-  # coverage; replace them with exact product URLs whenever you find a listing.
+  - name: "Ace Hardware Pokémon cards"
+    url: "https://www.acehardware.com/pokemon-cards"
+    max_price: 99.99
+    enabled: true
+
+  - name: "Family Dollar assorted Pokémon trading cards"
+    retailer: "Family Dollar"
+    url: "https://sameday.familydollar.com/store/family-dollar/products/90941757-pokemon-trading-cards-assorted"
+    max_price: 9.99
+    enabled: true
+
+  - name: "Family Dollar Pokémon 10-count trading cards"
+    retailer: "Family Dollar"
+    url: "https://sameday.familydollar.com/store/family-dollar/products/90941780-pokemon-10-count-trading-cards-assorted-limit-24-packs"
+    max_price: 9.99
+    enabled: true
+
+  - name: "Family Dollar Scarlet & Violet sleeved booster"
+    retailer: "Family Dollar"
+    url: "https://sameday.familydollar.com/store/family-dollar/products/30358427-the-pok-mon-company-pok-mon-tcg-scarlet-violet-sleeved-booster-1-ct"
+    max_price: 9.99
+    enabled: true
+
+  - name: "Kohl's Pokémon Knock-Out Collection"
+    url: "https://www.kohls.com/product/prd-6786184/pokmon-trading-card-game-knock-out-collection.jsp"
+    max_price: 29.99
+    enabled: true
+
+  - name: "Kohl's Pokémon Dragon-Type Tin"
+    url: "https://www.kohls.com/product/prd-6786183/pokmon-trading-card-game-dragon-type-tin-styles-may-vary.jsp"
+    max_price: 39.99
+    enabled: true
+
+  - name: "Kohl's Pokémon Scarlet & Violet 8 three-pack"
+    url: "https://www.kohls.com/product/prd-7251768/scarlet-violet-8-booster-three-pack.jsp"
+    max_price: 24.99
+    enabled: true
+
+  - name: "Dollar General Pokémon 15-card pack"
+    url: "https://www.dollargeneral.com/p/pokemon-trading-card-game-15-card-pack-1-ct/728192558375"
+    max_price: 12.99
+    enabled: true
+
+  - name: "Dollar General Pokémon mini booster packs"
+    url: "https://www.dollargeneral.com/p/pokemon-trading-card-game-evolutions-2-mini-booster-packs-1-bonus-card/728192507083"
+    max_price: 49.99
+    enabled: true
+
+  - name: "Five Below Pokémon and trading cards"
+    url: "https://www.fivebelow.com/categories/toys-and-games/blind-bags-and-collectibles/trading-cards"
+    max_price: 25.00
+    enabled: true
+
   - name: "Costco Pokémon trading cards"
     url: "https://www.costco.com/pokemon.html"
     max_price: 99.99
