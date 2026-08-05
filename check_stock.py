@@ -18,15 +18,16 @@ from bs4 import BeautifulSoup
 CONFIG_PATH = Path(os.getenv("CONFIG_PATH", "config.yaml"))
 STATE_PATH = Path(os.getenv("STATE_PATH", "state.json"))
 WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
-TIMEOUT = 25
+SEND_RUN_SUMMARY = os.getenv("SEND_RUN_SUMMARY", "false").lower() == "true"
+TIMEOUT = int(os.getenv("PAGE_TIMEOUT_SECONDS", "25"))
 
 OUT_OF_STOCK = (
     "out of stock", "sold out", "currently unavailable", "not available",
-    "coming soon", "notify me when available"
+    "coming soon", "notify me when available", "not available online"
 )
 IN_STOCK = (
     "add to cart", "add to bag", "ship it", "buy now", "in stock",
-    "available for shipping", "available for pickup"
+    "available for shipping", "available for pickup", "limited stock"
 )
 
 RETAILERS = {
@@ -60,10 +61,16 @@ RETAILERS = {
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "en-US,en;q=0.9",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Upgrade-Insecure-Requests": "1",
 }
 
 
@@ -181,13 +188,50 @@ def best_page_url(soup: BeautifulSoup, response_url: str) -> str:
     return response_url
 
 
+def build_session(url: str, item: dict[str, Any]) -> requests.Session:
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    host = urlparse(url).netloc.lower()
+    warmup_url = item.get("warmup_url")
+    if not warmup_url and host.endswith("pokemoncenter.com"):
+        # Pokémon Center often requires cookies from its home page before a product/search request.
+        warmup_url = "https://www.pokemoncenter.com/"
+    if warmup_url:
+        try:
+            session.get(str(warmup_url), timeout=15, allow_redirects=True)
+            time.sleep(1)
+        except requests.RequestException:
+            pass
+    return session
+
+
+def fetch_with_retry(session: requests.Session, url: str) -> requests.Response:
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            response = session.get(url, timeout=TIMEOUT, allow_redirects=True)
+            if response.status_code not in {403, 429, 500, 502, 503, 504}:
+                response.raise_for_status()
+                return response
+            last_error = requests.HTTPError(
+                f"{response.status_code} Client Error for url: {response.url}",
+                response=response,
+            )
+        except requests.RequestException as exc:
+            last_error = exc
+        if attempt < 2:
+            time.sleep(2 ** attempt)
+    assert last_error is not None
+    raise last_error
+
+
 def inspect(item: dict[str, Any]) -> Result:
     name = str(item["name"])
     url = str(item["url"])
     retailer = retailer_name(url, item.get("retailer"))
     configured_checkout = item.get("checkout_url") or item.get("cart_url")
-    response = requests.get(url, headers=HEADERS, timeout=TIMEOUT, allow_redirects=True)
-    response.raise_for_status()
+    session = build_session(url, item)
+    response = fetch_with_retry(session, url)
     soup = BeautifulSoup(response.text, "html.parser")
     text = soup.get_text(" ", strip=True).lower()
     ld_name, ld_price, ld_stock, ld_url = parse_jsonld(soup, response.url)
@@ -231,28 +275,28 @@ def state_signature(result: Result) -> str:
     return f"{int(result.in_stock)}|{price}|{result.checkout_url}"
 
 
-def send_alert(result: Result, max_price: float) -> None:
+def post_discord(payload: dict[str, Any]) -> None:
     if not WEBHOOK_URL:
         raise RuntimeError("DISCORD_WEBHOOK_URL secret is missing")
+    response = requests.post(WEBHOOK_URL, json=payload, timeout=TIMEOUT)
+    response.raise_for_status()
+
+
+def send_alert(result: Result, max_price: float) -> None:
     price = "Price not detected" if result.price is None else f"${result.price:.2f}"
-    payload = {
+    post_discord({
         "username": "Pokémon MSRP Alerts",
         "embeds": [{
             "title": f"IN STOCK: {result.name}",
             "url": result.url,
-            "description": (
-                "Open the button below to go directly to the retailer's product, "
-                "cart, or checkout page."
-            ),
+            "description": "Open the retailer page below to continue toward checkout.",
             "color": 5763719,
             "fields": [
                 {"name": "Retailer", "value": result.retailer, "inline": True},
                 {"name": "Price", "value": price, "inline": True},
                 {"name": "Maximum", "value": f"${max_price:.2f}", "inline": True},
             ],
-            "footer": {
-                "text": "Confirm seller, price, shipping, membership, and quantity before buying."
-            },
+            "footer": {"text": "Confirm seller, price, shipping, membership, and quantity."},
         }],
         "components": [{
             "type": 1,
@@ -263,16 +307,35 @@ def send_alert(result: Result, max_price: float) -> None:
                 "url": result.checkout_url,
             }],
         }],
-    }
-    response = requests.post(WEBHOOK_URL, json=payload, timeout=TIMEOUT)
-    response.raise_for_status()
+    })
+
+
+def send_summary(checked: int, eligible: int, failures: list[str]) -> None:
+    if not SEND_RUN_SUMMARY or not WEBHOOK_URL:
+        return
+    error_text = "None" if not failures else "\n".join(f"• {value}" for value in failures[:8])
+    post_discord({
+        "username": "Pokémon MSRP Alerts",
+        "embeds": [{
+            "title": "Stock scan completed",
+            "color": 3447003 if not failures else 16753920,
+            "fields": [
+                {"name": "Pages checked", "value": str(checked), "inline": True},
+                {"name": "Qualifying items", "value": str(eligible), "inline": True},
+                {"name": "Errors", "value": str(len(failures)), "inline": True},
+                {"name": "Error details", "value": error_text[:1024], "inline": False},
+            ],
+        }],
+    })
 
 
 def main() -> int:
     config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
     previous: dict[str, str] = load_json(STATE_PATH, {})
     current = dict(previous)
-    failures = 0
+    failures: list[str] = []
+    checked = 0
+    eligible_count = 0
 
     for item in config.get("watches", []):
         if not item.get("enabled", True):
@@ -280,6 +343,7 @@ def main() -> int:
         key = state_key(item)
         try:
             result = inspect(item)
+            checked += 1
             maximum = float(item["max_price"])
             signature = state_signature(result)
             eligible = result.in_stock and result.price is not None and result.price <= maximum
@@ -288,18 +352,21 @@ def main() -> int:
                 f"{result.retailer}: {result.name} | stock={result.in_stock} | "
                 f"price={result.price} | {result.evidence} | link={result.checkout_url}"
             )
+            if eligible:
+                eligible_count += 1
             if eligible and changed:
                 send_alert(result, maximum)
                 print("  Alert sent")
             current[key] = signature
         except Exception as exc:
-            failures += 1
-            print(f"ERROR checking {item.get('name', 'unknown')}: {exc}", file=sys.stderr)
+            message = f"{item.get('name', 'unknown')}: {exc}"
+            failures.append(message)
+            print(f"ERROR checking {message}", file=sys.stderr)
         time.sleep(1)
 
     save_json(STATE_PATH, current)
-    # A retailer block should not stop state from being saved or other checks from running.
-    return 0 if failures < max(3, len(config.get("watches", []))) else 1
+    send_summary(checked, eligible_count, failures)
+    return 0 if len(failures) < max(3, len(config.get("watches", []))) else 1
 
 
 if __name__ == "__main__":
