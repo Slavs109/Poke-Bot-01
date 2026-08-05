@@ -15,8 +15,8 @@ class StockCheckerTests(unittest.TestCase):
             "https://www.samsclub.com/p/test": "Sam's Club",
             "https://www.costco.com/test.html": "Costco",
             "https://www.acehardware.com/test": "Ace Hardware",
-            "https://www.target.com/p/test": "Target",
-            "https://www.dickssportinggoods.com/p/test": "DICK'S Sporting Goods",
+            "https://www.kohls.com/product/test": "Kohl's",
+            "https://www.staples.com/test/product_1": "Staples",
         }
         for url, expected in cases.items():
             with self.subTest(url=url):
@@ -28,6 +28,11 @@ class StockCheckerTests(unittest.TestCase):
             check_stock.normalize_url("https://example.com/search", "/product/123"),
             "https://example.com/product/123",
         )
+
+    def test_purchase_signal_wording(self) -> None:
+        for phrase in ("Add to cart", "Add to Bag", "Buy Now", "Checkout", "Ship to Home Available"):
+            with self.subTest(phrase=phrase):
+                self.assertTrue(any(signal in phrase.lower() for signal in check_stock.PURCHASE_SIGNALS))
 
     def test_jsonld_product_discovery(self) -> None:
         payload = {
@@ -56,13 +61,12 @@ class StockCheckerTests(unittest.TestCase):
     def test_inspect_uses_discovered_product_url(self, mock_build_session: Mock) -> None:
         html = """
         <html><head>
-          <link rel="canonical" href="https://www.target.com/p/pokemon-test/-/A-123">
           <script type="application/ld+json">
           {"@type":"Product","name":"Pokemon Test Elite Trainer Box",
            "url":"https://www.target.com/p/pokemon-test/-/A-123",
            "offers":{"price":"49.99","availability":"https://schema.org/InStock"}}
           </script>
-        </head><body>Add to cart</body></html>
+        </head><body>Pokemon cards Add to cart</body></html>
         """
         response = Mock(status_code=200, text=html, url="https://www.target.com/p/pokemon-test/-/A-123")
         response.raise_for_status.return_value = None
@@ -73,43 +77,39 @@ class StockCheckerTests(unittest.TestCase):
         result = check_stock.inspect({
             "name": "Pokemon Test ETB",
             "url": response.url,
+            "required_terms": ["pokemon"],
             "max_price": 59.99,
         })
-
         self.assertEqual(result.retailer, "Target")
         self.assertEqual(result.price, 49.99)
         self.assertTrue(result.in_stock)
         self.assertEqual(result.checkout_url, response.url)
 
     @patch("check_stock.build_session")
-    def test_explicit_checkout_url_wins(self, mock_build_session: Mock) -> None:
+    def test_unrelated_cart_button_does_not_trigger(self, mock_build_session: Mock) -> None:
         response = Mock(
             status_code=200,
             text='<html><body><span>$39.99</span><button>Add to cart</button></body></html>',
-            url="https://www.acehardware.com/product/pokemon-cards",
+            url="https://www.acehardware.com/search?query=pokemon",
         )
         response.raise_for_status.return_value = None
         session = Mock()
         session.get.return_value = response
         mock_build_session.return_value = session
-
         result = check_stock.inspect({
             "name": "Pokemon cards",
             "url": response.url,
-            "checkout_url": "https://www.acehardware.com/cart",
+            "required_terms": ["pokemon", "card"],
             "max_price": 59.99,
         })
-        self.assertEqual(result.checkout_url, "https://www.acehardware.com/cart")
-        self.assertEqual(result.price, 39.99)
-        self.assertTrue(result.in_stock)
+        self.assertFalse(result.in_stock)
+        self.assertEqual(result.evidence, "required product wording not found")
 
     @patch("check_stock.requests.Session")
     def test_pokemon_center_session_warms_homepage(self, mock_session_class: Mock) -> None:
         session = Mock()
         mock_session_class.return_value = session
-        check_stock.build_session(
-            "https://www.pokemoncenter.com/search/pokemon-151-trainer-box", {}
-        )
+        check_stock.build_session("https://www.pokemoncenter.com/search/pokemon-151", {})
         session.get.assert_called_once_with(
             "https://www.pokemoncenter.com/", timeout=15, allow_redirects=True
         )
