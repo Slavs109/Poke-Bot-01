@@ -8,6 +8,9 @@ on:
     paths:
       - "check_stock.py"
       - "queue_monitor.py"
+      - "run_forever.py"
+      - "Dockerfile"
+      - "docker-compose.yml"
       - "config.yaml"
       - "requirements.txt"
       - "test_check_stock.py"
@@ -43,10 +46,15 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Compile stock checker
-        run: python -m py_compile check_stock.py queue_monitor.py test_check_stock.py
+        run: python -m py_compile check_stock.py queue_monitor.py run_forever.py test_check_stock.py
 
       - name: Run unit tests
         run: python -m unittest -v
+
+      - name: Validate Docker Compose
+        run: docker compose config
+        env:
+          DISCORD_WEBHOOK_URL: https://discord.invalid/api/webhooks/test/test
 
   check-stock:
     if: github.event_name != 'pull_request'
