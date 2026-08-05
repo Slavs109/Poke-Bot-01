@@ -22,12 +22,30 @@ SEND_RUN_SUMMARY = os.getenv("SEND_RUN_SUMMARY", "false").lower() == "true"
 TIMEOUT = int(os.getenv("PAGE_TIMEOUT_SECONDS", "25"))
 
 OUT_OF_STOCK = (
-    "out of stock", "sold out", "currently unavailable", "not available",
-    "coming soon", "notify me when available", "not available online"
+    "out of stock",
+    "sold out",
+    "currently unavailable",
+    "not available",
+    "coming soon",
+    "notify me when available",
+    "not available online",
+    "shipping unavailable",
 )
-IN_STOCK = (
-    "add to cart", "add to bag", "ship it", "buy now", "in stock",
-    "available for shipping", "available for pickup", "limited stock"
+PURCHASE_SIGNALS = (
+    "add to cart",
+    "add-to-cart",
+    "add to bag",
+    "add to basket",
+    "buy now",
+    "shop now",
+    "ship it",
+    "checkout",
+    "available for shipping",
+    "available to ship",
+    "ship to home available",
+    "same day delivery available",
+    "pickup available",
+    "limited stock",
 )
 
 RETAILERS = {
@@ -48,10 +66,11 @@ RETAILERS = {
     "meijer.com": "Meijer",
     "kroger.com": "Kroger",
     "fredmeyer.com": "Fred Meyer",
-    "macys.com": "Macy's",
+    "kohls.com": "Kohl's",
     "fivebelow.com": "Five Below",
     "dollargeneral.com": "Dollar General",
     "familydollar.com": "Family Dollar",
+    "staples.com": "Staples",
     "hottopic.com": "Hot Topic",
     "boxlunch.com": "BoxLunch",
     "academy.com": "Academy Sports + Outdoors",
@@ -67,11 +86,11 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Cache-Control": "no-cache",
     "Pragma": "no-cache",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Upgrade-Insecure-Requests": "1",
 }
+
+
+class RetailerBlockedError(RuntimeError):
+    pass
 
 
 @dataclass
@@ -194,7 +213,6 @@ def build_session(url: str, item: dict[str, Any]) -> requests.Session:
     host = urlparse(url).netloc.lower()
     warmup_url = item.get("warmup_url")
     if not warmup_url and host.endswith("pokemoncenter.com"):
-        # Pokémon Center often requires cookies from its home page before a product/search request.
         warmup_url = "https://www.pokemoncenter.com/"
     if warmup_url:
         try:
@@ -210,19 +228,32 @@ def fetch_with_retry(session: requests.Session, url: str) -> requests.Response:
     for attempt in range(3):
         try:
             response = session.get(url, timeout=TIMEOUT, allow_redirects=True)
-            if response.status_code not in {403, 429, 500, 502, 503, 504}:
+            if response.status_code in {403, 429}:
+                last_error = RetailerBlockedError(
+                    f"blocked with HTTP {response.status_code} ({urlparse(url).netloc})"
+                )
+            elif response.status_code in {500, 502, 503, 504}:
+                last_error = requests.HTTPError(
+                    f"temporary HTTP {response.status_code} for {response.url}", response=response
+                )
+            else:
                 response.raise_for_status()
                 return response
-            last_error = requests.HTTPError(
-                f"{response.status_code} Client Error for url: {response.url}",
-                response=response,
-            )
+        except requests.Timeout:
+            last_error = TimeoutError(f"timed out after {TIMEOUT}s ({urlparse(url).netloc})")
         except requests.RequestException as exc:
             last_error = exc
         if attempt < 2:
             time.sleep(2 ** attempt)
     assert last_error is not None
     raise last_error
+
+
+def required_terms_present(text: str, item: dict[str, Any]) -> bool:
+    terms = item.get("required_terms", ["pokemon"])
+    if isinstance(terms, str):
+        terms = [terms]
+    return all(str(term).lower() in text for term in terms)
 
 
 def inspect(item: dict[str, Any]) -> Result:
@@ -243,27 +274,24 @@ def inspect(item: dict[str, Any]) -> Result:
         else product_url
     ) or product_url
 
+    matches_product = required_terms_present(text, item)
     out_hits = [phrase for phrase in OUT_OF_STOCK if phrase in text]
-    in_hits = [phrase for phrase in IN_STOCK if phrase in text]
-    if ld_stock is not None:
+    purchase_hits = [phrase for phrase in PURCHASE_SIGNALS if phrase in text]
+
+    if not matches_product:
+        in_stock = False
+        evidence = "required product wording not found"
+    elif ld_stock is not None:
         in_stock = ld_stock
         evidence = "structured product availability"
-    elif out_hits:
+    elif out_hits and not purchase_hits:
         in_stock = False
         evidence = out_hits[0]
     else:
-        in_stock = bool(in_hits)
-        evidence = in_hits[0] if in_hits else "no purchase signal found"
+        in_stock = bool(purchase_hits)
+        evidence = purchase_hits[0] if purchase_hits else "no cart or checkout wording found"
 
-    return Result(
-        ld_name or name,
-        product_url,
-        retailer,
-        price,
-        in_stock,
-        evidence,
-        checkout_url,
-    )
+    return Result(ld_name or name, product_url, retailer, price, in_stock, evidence, checkout_url)
 
 
 def state_key(item: dict[str, Any]) -> str:
@@ -289,31 +317,35 @@ def send_alert(result: Result, max_price: float) -> None:
         "embeds": [{
             "title": f"IN STOCK: {result.name}",
             "url": result.url,
-            "description": "Open the retailer page below to continue toward checkout.",
+            "description": "The page contains Pokémon product wording and an active cart/checkout signal.",
             "color": 5763719,
             "fields": [
                 {"name": "Retailer", "value": result.retailer, "inline": True},
                 {"name": "Price", "value": price, "inline": True},
                 {"name": "Maximum", "value": f"${max_price:.2f}", "inline": True},
+                {"name": "Detected", "value": result.evidence, "inline": False},
             ],
-            "footer": {"text": "Confirm seller, price, shipping, membership, and quantity."},
         }],
         "components": [{
             "type": 1,
             "components": [{
                 "type": 2,
                 "style": 5,
-                "label": "OPEN PRODUCT / CHECKOUT",
+                "label": "ADD TO CART / CHECKOUT",
                 "url": result.checkout_url,
             }],
         }],
     })
 
 
-def send_summary(checked: int, eligible: int, failures: list[str]) -> None:
+def send_summary(checked: int, eligible: int, blocked: list[str], failures: list[str]) -> None:
     if not SEND_RUN_SUMMARY or not WEBHOOK_URL:
         return
-    error_text = "None" if not failures else "\n".join(f"• {value}" for value in failures[:8])
+    details = []
+    if blocked:
+        details.append("Blocked: " + ", ".join(blocked[:8]))
+    if failures:
+        details.append("Errors: " + " | ".join(failures[:6]))
     post_discord({
         "username": "Pokémon MSRP Alerts",
         "embeds": [{
@@ -322,8 +354,9 @@ def send_summary(checked: int, eligible: int, failures: list[str]) -> None:
             "fields": [
                 {"name": "Pages checked", "value": str(checked), "inline": True},
                 {"name": "Qualifying items", "value": str(eligible), "inline": True},
-                {"name": "Errors", "value": str(len(failures)), "inline": True},
-                {"name": "Error details", "value": error_text[:1024], "inline": False},
+                {"name": "Blocked pages", "value": str(len(blocked)), "inline": True},
+                {"name": "Other errors", "value": str(len(failures)), "inline": True},
+                {"name": "Details", "value": ("\n".join(details) or "None")[:1024], "inline": False},
             ],
         }],
     })
@@ -334,6 +367,7 @@ def main() -> int:
     previous: dict[str, str] = load_json(STATE_PATH, {})
     current = dict(previous)
     failures: list[str] = []
+    blocked: list[str] = []
     checked = 0
     eligible_count = 0
 
@@ -358,6 +392,9 @@ def main() -> int:
                 send_alert(result, maximum)
                 print("  Alert sent")
             current[key] = signature
+        except RetailerBlockedError as exc:
+            blocked.append(str(item.get("name", "unknown")))
+            print(f"BLOCKED {item.get('name', 'unknown')}: {exc}", file=sys.stderr)
         except Exception as exc:
             message = f"{item.get('name', 'unknown')}: {exc}"
             failures.append(message)
@@ -365,7 +402,7 @@ def main() -> int:
         time.sleep(1)
 
     save_json(STATE_PATH, current)
-    send_summary(checked, eligible_count, failures)
+    send_summary(checked, eligible_count, blocked, failures)
     return 0 if len(failures) < max(3, len(config.get("watches", []))) else 1
 
 
