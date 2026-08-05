@@ -1,0 +1,16 @@
+services:
+  pokemon-stock-checker:
+    build: .
+    restart: unless-stopped
+    environment:
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
+      SEND_RUN_SUMMARY: "true"
+      PAGE_TIMEOUT_SECONDS: "25"
+      STATE_PATH: /data/state.json
+      QUEUE_STATE_PATH: /data/queue_state.json
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - pokemon-stock-state:/data
+
+volumes:
+  pokemon-stock-state:
