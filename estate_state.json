@@ -4,13 +4,19 @@
       "pok\u00e9mon",
       "yu-gi-oh"
     ],
-    "title": "Fort Worth Estate Sale - Honda VTX, American Girl & More"
+    "title": "Fort Worth Estate Sale - Honda VTX, American Girl & More",
+    "vision": false,
+    "vision_confidence": 0,
+    "vision_photo": ""
   },
   "5a7cad2463238c355be07647f914528558d8b33c0016aa5823060c198ca8e13b": {
     "keywords": [
       "pokemon",
       "lorcana"
     ],
-    "title": "Designer Bags, Watches, Diamonds, Jewelry, Coins, & More! SHIPS!"
+    "title": "Designer Bags, Watches, Diamonds, Jewelry, Coins, & More! SHIPS!",
+    "vision": false,
+    "vision_confidence": 0,
+    "vision_photo": ""
   }
 }
