@@ -32,12 +32,29 @@ estate_sales:
     - "elite trainer box"
     - "etb"
 
-  # Photo analysis is a second trigger for listings whose text has no keyword hit.
-  # It is intentionally conservative and ignores sports cards and generic collectibles.
+  # Local YOLO-World photo analysis. No API key is required.
+  # Prompts are intentionally specific so generic/sports cards are not a positive class.
   photo_analysis:
     enabled: true
-    model: "gpt-5-mini"
-    minimum_confidence: 85
+    model: "yolov8s-world.pt"
+    minimum_confidence: 0.35
     max_photos_per_sale: 8
-    photos_per_request: 4
     max_new_sales_scanned_per_run: 15
+    classes:
+      - "Pokemon trading card"
+      - "Pokemon card binder page"
+      - "Pokemon booster pack"
+      - "Pokemon booster box"
+      - "Pokemon Elite Trainer Box"
+      - "Magic The Gathering card"
+      - "Magic The Gathering booster pack"
+      - "Yu-Gi-Oh trading card"
+      - "Yu-Gi-Oh booster pack"
+      - "One Piece Card Game card"
+      - "Disney Lorcana card"
+      - "Digimon trading card"
+      - "Flesh and Blood trading card"
+      - "Dragon Ball Super trading card"
+      - "Weiss Schwarz trading card"
+      - "graded Pokemon card slab"
+      - "graded non-sports trading card slab"
