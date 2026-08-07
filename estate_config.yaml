@@ -4,7 +4,6 @@ estate_sales:
   max_sales_per_search_page: 50
   request_delay_seconds: 0.5
 
-  # Search both local ZIP areas.
   locations:
     - zip: "75043"
       city: "Garland"
@@ -13,13 +12,13 @@ estate_sales:
       city: "Dallas"
       state: "TX"
 
-  # Non-sports trading cards only.
+  # Alert ONLY when one of these literal words/phrases appears in the sale title or page text.
+  # Do not infer matches from related words such as "collectibles", "toys", or "memorabilia".
   keywords:
     - "pokemon"
     - "pokémon"
     - "pokemon cards"
     - "pokemon tcg"
-    - "trading cards"
     - "tcg"
     - "magic the gathering"
     - "mtg"
@@ -31,28 +30,5 @@ estate_sales:
     - "flesh and blood"
     - "dragon ball super card game"
     - "weiss schwarz"
-    - "graded cards"
-    - "card collection"
-    - "card binder"
-    - "booster pack"
-    - "booster box"
     - "elite trainer box"
     - "etb"
-    - "sealed tcg"
-    - "psa"
-    - "cgc"
-    - "bgs"
-
-  exclude_sports_terms:
-    - "sports cards"
-    - "baseball cards"
-    - "basketball cards"
-    - "football cards"
-    - "hockey cards"
-    - "soccer cards"
-    - "nascar cards"
-    - "panini"
-    - "topps"
-    - "bowman"
-    - "donruss"
-    - "upper deck"
