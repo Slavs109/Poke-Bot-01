@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,7 +20,6 @@ CONFIG_PATH = Path(os.getenv("CONFIG_PATH", "config.yaml"))
 STATE_PATH = Path(os.getenv("ESTATE_STATE_PATH", "estate_state.json"))
 PHOTO_STATE_PATH = Path(os.getenv("ESTATE_PHOTO_STATE_PATH", "estate_photo_state.json"))
 WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 TIMEOUT = int(os.getenv("PAGE_TIMEOUT_SECONDS", "25"))
 FORCE_REPORT = os.getenv("FORCE_REPORT", "false").lower() == "true"
 
@@ -38,6 +38,29 @@ DEFAULT_KEYWORDS = [
     "flesh and blood", "dragon ball super card game", "weiss schwarz",
     "elite trainer box", "etb",
 ]
+
+DEFAULT_YOLO_CLASSES = [
+    "Pokemon trading card",
+    "Pokemon card binder page",
+    "Pokemon booster pack",
+    "Pokemon booster box",
+    "Pokemon Elite Trainer Box",
+    "Magic The Gathering card",
+    "Magic The Gathering booster pack",
+    "Yu-Gi-Oh trading card",
+    "Yu-Gi-Oh booster pack",
+    "One Piece Card Game card",
+    "Disney Lorcana card",
+    "Digimon trading card",
+    "Flesh and Blood trading card",
+    "Dragon Ball Super trading card",
+    "Weiss Schwarz trading card",
+    "graded Pokemon card slab",
+    "graded non-sports trading card slab",
+]
+
+_VISION_MODEL: Any = None
+_VISION_MODEL_KEY: tuple[str, tuple[str, ...]] | None = None
 
 
 @dataclass
@@ -217,77 +240,82 @@ def build_search_urls(location: dict[str, Any]) -> list[str]:
     ]
 
 
-def response_output_text(payload: dict[str, Any]) -> str:
-    chunks: list[str] = []
-    for item in payload.get("output", []):
-        for part in item.get("content", []) if isinstance(item, dict) else []:
-            if isinstance(part, dict) and part.get("type") == "output_text":
-                chunks.append(str(part.get("text", "")))
-    return "\n".join(chunks).strip()
+def get_yolo_model(model_name: str, classes: list[str]):
+    global _VISION_MODEL, _VISION_MODEL_KEY
+    key = (model_name, tuple(classes))
+    if _VISION_MODEL is not None and _VISION_MODEL_KEY == key:
+        return _VISION_MODEL
+    from ultralytics import YOLOWorld
+    model = YOLOWorld(model_name)
+    model.set_classes(classes)
+    _VISION_MODEL = model
+    _VISION_MODEL_KEY = key
+    return model
 
 
-def analyze_photo_batch(image_urls: list[str], model: str) -> VisionHit:
-    if not OPENAI_API_KEY or not image_urls:
-        return VisionHit()
-    content: list[dict[str, Any]] = [{
-        "type": "input_text",
-        "text": (
-            "Inspect these estate-sale photos. Decide whether ANY photo clearly shows NON-SPORTS "
-            "trading cards or sealed non-sports TCG products. Positive examples include Pokemon, "
-            "Magic: The Gathering, Yu-Gi-Oh!, One Piece Card Game, Lorcana, Digimon, Flesh and Blood, "
-            "Dragon Ball Super Card Game, Weiss Schwarz, graded non-sports card slabs, booster packs, "
-            "booster boxes, or Elite Trainer Boxes. IGNORE sports cards, baseball/football/basketball/"
-            "hockey/soccer cards, generic collectibles, playing cards, postcards, board games, and items "
-            "that merely resemble cards. Be conservative. Return ONLY JSON exactly like: "
-            '{"match":true,"confidence":92,"labels":["Pokemon cards"],"photo_index":2,'
-            '"reason":"visible Pokemon card binder pages"}. If uncertain, match=false.'
-        ),
-    }]
-    for url in image_urls:
-        content.append({"type": "input_image", "image_url": url, "detail": "auto"})
-    response = requests.post(
-        "https://api.openai.com/v1/responses",
-        headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
-        json={"model": model, "input": [{"role": "user", "content": content}]},
-        timeout=90,
-    )
+def download_photo(session: requests.Session, url: str) -> str:
+    response = session.get(url, timeout=TIMEOUT, allow_redirects=True)
     response.raise_for_status()
-    raw = response_output_text(response.json())
-    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.I)
-    data = json.loads(raw)
-    index = int(data.get("photo_index", 0) or 0)
-    photo = image_urls[index - 1] if 1 <= index <= len(image_urls) else image_urls[0]
-    return VisionHit(
-        matched=bool(data.get("match", False)),
-        confidence=max(0, min(100, int(data.get("confidence", 0) or 0))),
-        labels=[str(x) for x in data.get("labels", [])][:8],
-        reason=str(data.get("reason", ""))[:300],
-        photo_url=photo,
-    )
+    content_type = response.headers.get("content-type", "").lower()
+    if "png" in content_type:
+        suffix = ".png"
+    elif "webp" in content_type:
+        suffix = ".webp"
+    else:
+        suffix = ".jpg"
+    handle = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    handle.write(response.content)
+    handle.close()
+    return handle.name
 
 
-def analyze_photos(urls: list[str], photo_cfg: dict[str, Any]) -> VisionHit:
-    if not OPENAI_API_KEY or not photo_cfg.get("enabled", False):
+def analyze_photos(session: requests.Session, urls: list[str], photo_cfg: dict[str, Any]) -> VisionHit:
+    if not photo_cfg.get("enabled", False) or not urls:
         return VisionHit()
     maximum = int(photo_cfg.get("max_photos_per_sale", 8))
-    batch_size = max(1, int(photo_cfg.get("photos_per_request", 4)))
-    model = str(photo_cfg.get("model", "gpt-5-mini"))
-    minimum = int(photo_cfg.get("minimum_confidence", 85))
-    selected = urls[:maximum]
+    minimum = float(photo_cfg.get("minimum_confidence", 0.35))
+    model_name = str(photo_cfg.get("model", "yolov8s-world.pt"))
+    classes = [str(x) for x in photo_cfg.get("classes", DEFAULT_YOLO_CLASSES)]
+    model = get_yolo_model(model_name, classes)
     best = VisionHit()
-    for start in range(0, len(selected), batch_size):
-        batch = selected[start:start + batch_size]
-        hit = analyze_photo_batch(batch, model)
-        if hit.confidence > best.confidence:
-            best = hit
-        if hit.matched and hit.confidence >= minimum:
-            return hit
-    if best.confidence < minimum:
-        best.matched = False
+
+    for url in urls[:maximum]:
+        path = ""
+        try:
+            path = download_photo(session, url)
+            results = model.predict(source=path, conf=minimum, verbose=False, device="cpu")
+            if not results:
+                continue
+            result = results[0]
+            boxes = getattr(result, "boxes", None)
+            if boxes is None or len(boxes) == 0:
+                continue
+            names = result.names
+            for cls_tensor, conf_tensor in zip(boxes.cls, boxes.conf):
+                cls_id = int(cls_tensor.item())
+                confidence = float(conf_tensor.item())
+                label = names[cls_id] if isinstance(names, dict) else names[cls_id]
+                pct = int(round(confidence * 100))
+                if pct > best.confidence:
+                    best = VisionHit(
+                        matched=confidence >= minimum,
+                        confidence=pct,
+                        labels=[str(label)],
+                        reason=f"YOLO-World detected {label}",
+                        photo_url=url,
+                    )
+        except Exception as exc:
+            print(f"YOLO photo error {url}: {exc}", file=sys.stderr)
+        finally:
+            if path:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
     return best
 
 
-def sale_details(session: requests.Session, url: str, radius: int) -> tuple[requests.Response, BeautifulSoup, str, list[str]]:
+def sale_details(session: requests.Session, url: str) -> tuple[requests.Response, BeautifulSoup, str, list[str]]:
     response = fetch(session, url)
     soup = BeautifulSoup(response.text, "html.parser")
     text = normalize_text(soup)
@@ -322,16 +350,14 @@ def send_alert(match: SaleMatch) -> None:
     if match.keywords:
         fields.append({"name": "Exact keyword(s)", "value": ", ".join(match.keywords)[:1024], "inline": False})
     if match.vision and match.vision.matched:
-        labels = ", ".join(match.vision.labels or []) or "Non-sports trading cards"
         fields.extend([
-            {"name": "Photo confidence", "value": f"{match.vision.confidence}%", "inline": True},
-            {"name": "Photo identified", "value": labels[:1024], "inline": False},
-            {"name": "Why", "value": match.vision.reason[:1024] or "Visible trading-card product", "inline": False},
+            {"name": "YOLO confidence", "value": f"{match.vision.confidence}%", "inline": True},
+            {"name": "Photo identified", "value": ", ".join(match.vision.labels or [])[:1024], "inline": False},
         ])
     embed: dict[str, Any] = {
         "title": f"TRADING CARD MATCH: {match.title}"[:256],
         "url": match.url,
-        "description": "Matched by exact listing text and/or a conservative scan of the sale photos.",
+        "description": "Matched by exact listing text and/or local YOLO-World photo detection.",
         "color": 10181046,
         "fields": fields,
     }
@@ -343,7 +369,6 @@ def send_alert(match: SaleMatch) -> None:
 def send_summary(scanned_pages: int, checked_sales: int, matches: int, photo_scans: int, errors: list[str]) -> None:
     if not FORCE_REPORT:
         return
-    vision_status = "enabled" if OPENAI_API_KEY else "disabled (OPENAI_API_KEY missing)"
     post_discord({
         "username": "Estate Sale Card Finds",
         "embeds": [{
@@ -353,8 +378,8 @@ def send_summary(scanned_pages: int, checked_sales: int, matches: int, photo_sca
                 {"name": "Search pages", "value": str(scanned_pages), "inline": True},
                 {"name": "Sales checked", "value": str(checked_sales), "inline": True},
                 {"name": "Matches", "value": str(matches), "inline": True},
-                {"name": "New photo scans", "value": str(photo_scans), "inline": True},
-                {"name": "Vision", "value": vision_status, "inline": True},
+                {"name": "New YOLO scans", "value": str(photo_scans), "inline": True},
+                {"name": "Photo detector", "value": "YOLO-World (local)", "inline": True},
                 {"name": "Errors", "value": str(len(errors)), "inline": True},
                 {"name": "Details", "value": ("\n".join(errors[:5]) or "None")[:1024], "inline": False},
             ],
@@ -393,7 +418,8 @@ def main() -> int:
             try:
                 response = fetch(session, search_url)
                 scanned_pages += 1
-                for url in listing_urls(BeautifulSoup(response.text, "html.parser"), response.url)[:max_sales]:
+                soup = BeautifulSoup(response.text, "html.parser")
+                for url in listing_urls(soup, response.url)[:max_sales]:
                     if url not in seen_urls:
                         seen_urls.add(url)
                         candidate_urls.append(url)
@@ -404,13 +430,13 @@ def main() -> int:
     for url in candidate_urls:
         try:
             checked_sales += 1
-            response, soup, text, photos = sale_details(session, url, radius)
+            response, soup, text, photos = sale_details(session, url)
             hits = find_keywords(text, keywords)
             vision = VisionHit()
             key = state_key(response.url)
             signature = photos_signature(photos)
 
-            if not hits and photo_cfg.get("enabled", False) and OPENAI_API_KEY and photos:
+            if not hits and photo_cfg.get("enabled", False) and photos:
                 cached = photo_state.get(key, {})
                 if cached.get("photos_signature") == signature:
                     vision = VisionHit(
@@ -422,7 +448,7 @@ def main() -> int:
                     )
                 elif photo_scans < photo_scan_limit:
                     photo_scans += 1
-                    vision = analyze_photos(photos, photo_cfg)
+                    vision = analyze_photos(session, photos, photo_cfg)
                     photo_state[key] = {
                         "photos_signature": signature,
                         "matched": vision.matched,
@@ -436,7 +462,7 @@ def main() -> int:
                 continue
 
             matches += 1
-            trigger = "exact keyword + photo" if hits and vision.matched else ("exact keyword" if hits else "photo recognition")
+            trigger = "exact keyword + YOLO" if hits and vision.matched else ("exact keyword" if hits else "YOLO photo")
             match = SaleMatch(
                 title=extract_title(soup),
                 url=response.url,
@@ -467,7 +493,10 @@ def main() -> int:
     save_json(STATE_PATH, current)
     save_json(PHOTO_STATE_PATH, photo_state)
     send_summary(scanned_pages, checked_sales, matches, photo_scans, errors)
-    print(f"Estate scan: pages={scanned_pages} sales={checked_sales} matches={matches} photo_scans={photo_scans} errors={len(errors)}")
+    print(
+        f"Estate scan: pages={scanned_pages} sales={checked_sales} "
+        f"matches={matches} photo_scans={photo_scans} errors={len(errors)}"
+    )
     return 0
 
 
