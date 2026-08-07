@@ -47,7 +47,7 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -78,16 +78,17 @@ jobs:
               webhook,
               json={
                   "username": "Estate Sale Card Finds",
-                  "content": "✅ Bot updated: scanning estate sales within 25 miles and alerting only when an exact configured trading-card keyword appears in the listing text."
+                  "content": "✅ Bot updated: scanning estate sales within 25 miles for exact card keywords AND visually checking listing photos for non-sports trading cards."
               },
               timeout=25,
           )
           response.raise_for_status()
           PY
 
-      - name: Check nearby estate sales for exact trading-card keywords
+      - name: Check nearby estate sales for text and photo card matches
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           CONFIG_PATH: estate_config.yaml
           FORCE_REPORT: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
           PAGE_TIMEOUT_SECONDS: "25"
@@ -97,7 +98,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add estate_state.json
+          git add estate_state.json estate_photo_state.json
           if git diff --cached --quiet; then
             echo "No state change"
           else
