@@ -30,43 +30,25 @@ HEADERS = {
 }
 
 DEFAULT_KEYWORDS = [
-    "pokemon",
-    "pokémon",
-    "pokemon cards",
-    "trading cards",
-    "tcg",
-    "magic the gathering",
-    "yu-gi-oh",
-    "yugioh",
-    "sports cards",
-    "video games",
-    "video game",
-    "nintendo",
-    "playstation",
-    "xbox",
-    "gamecube",
-    "sega",
-    "game boy",
-    "gameboy",
-    "pokemon center",
-    "console",
-    "retro games",
-    "retro gaming",
-    "vintage toys",
-    "lego",
-    "funko",
-    "sealed games",
-    "psa",
-    "cgc",
-    "bgs",
+    "pokemon", "pokémon", "pokemon cards", "pokemon tcg", "trading cards", "tcg",
+    "magic the gathering", "mtg", "yu-gi-oh", "yugioh", "one piece card game",
+    "lorcana", "digimon card game", "flesh and blood", "dragon ball super card game",
+    "weiss schwarz", "graded cards", "card collection", "card binder", "booster pack",
+    "booster box", "elite trainer box", "etb", "sealed tcg", "psa", "cgc", "bgs",
 ]
 
-STRONG_TERMS = {
-    "pokemon", "pokémon", "pokemon cards", "tcg", "magic the gathering",
-    "yu-gi-oh", "yugioh", "video games", "video game", "nintendo",
-    "playstation", "xbox", "gamecube", "sega", "game boy", "gameboy",
-    "pokemon center", "retro games", "retro gaming", "psa", "cgc", "bgs",
+DEFAULT_EXCLUDED_SPORTS = [
+    "sports cards", "baseball cards", "basketball cards", "football cards",
+    "hockey cards", "soccer cards", "nascar cards", "panini", "topps",
+    "bowman", "donruss", "upper deck",
+]
+
+GENERIC_TERMS = {
+    "trading cards", "tcg", "graded cards", "card collection", "card binder",
+    "booster pack", "booster box", "psa", "cgc", "bgs",
 }
+
+STRONG_TERMS = set(DEFAULT_KEYWORDS) - GENERIC_TERMS
 
 
 @dataclass
@@ -122,7 +104,6 @@ def listing_urls(soup: BeautifulSoup, base_url: str) -> list[str]:
         path = parsed.path.lower()
         is_detail = False
         if "estatesales.net" in host:
-            # Detail URLs normally continue past /TX/City/ZIP/...
             parts = [p for p in parsed.path.split("/") if p]
             is_detail = len(parts) >= 5 and parts[0].upper() == "TX"
         elif "estatesales.org" in host:
@@ -147,6 +128,15 @@ def find_keywords(text: str, keywords: list[str]) -> list[str]:
         if needle and needle in low and needle not in hits:
             hits.append(needle)
     return hits
+
+
+def should_exclude_sports(text: str, hits: list[str], excluded_terms: list[str]) -> bool:
+    low = text.lower()
+    sports_hits = [term for term in excluded_terms if term and term in low]
+    if not sports_hits:
+        return False
+    # Keep mixed sales when a specific non-sports game/franchise is explicitly named.
+    return not any(hit in STRONG_TERMS for hit in hits)
 
 
 def extract_title(soup: BeautifulSoup) -> str:
@@ -228,12 +218,12 @@ def build_search_urls(location: dict[str, Any]) -> list[str]:
     ]
 
 
-def inspect_sale(session: requests.Session, url: str, keywords: list[str], radius: int) -> SaleMatch | None:
+def inspect_sale(session: requests.Session, url: str, keywords: list[str], excluded_terms: list[str], radius: int) -> SaleMatch | None:
     response = fetch(session, url)
     soup = BeautifulSoup(response.text, "html.parser")
     text = normalize_text(soup)
     hits = find_keywords(text, keywords)
-    if not hits:
+    if not hits or should_exclude_sports(text, hits, excluded_terms):
         return None
     photos = photo_count(soup)
     return SaleMatch(
@@ -273,11 +263,11 @@ def send_alert(match: SaleMatch) -> None:
         {"name": "Photos detected", "value": str(match.photo_count), "inline": True},
     ]
     post_discord({
-        "username": "Estate Sale Finds",
+        "username": "Estate Sale Card Finds",
         "embeds": [{
-            "title": f"COLLECTIBLE MATCH: {match.title}"[:256],
+            "title": f"TRADING CARD MATCH: {match.title}"[:256],
             "url": match.url,
-            "description": "A nearby estate-sale listing matched your collectible/gaming watch list.",
+            "description": "A nearby estate-sale listing matched your non-sports trading-card watch list.",
             "color": 10181046,
             "fields": fields,
         }],
@@ -288,14 +278,14 @@ def send_summary(scanned_pages: int, checked_sales: int, matches: int, errors: l
     if not FORCE_REPORT:
         return
     post_discord({
-        "username": "Estate Sale Finds",
+        "username": "Estate Sale Card Finds",
         "embeds": [{
-            "title": "Estate-sale scan completed",
+            "title": "Estate-sale card scan completed",
             "color": 3447003 if not errors else 16753920,
             "fields": [
                 {"name": "Search pages", "value": str(scanned_pages), "inline": True},
                 {"name": "Sales checked", "value": str(checked_sales), "inline": True},
-                {"name": "Matches", "value": str(matches), "inline": True},
+                {"name": "Card matches", "value": str(matches), "inline": True},
                 {"name": "Errors", "value": str(len(errors)), "inline": True},
                 {"name": "Details", "value": ("\n".join(errors[:5]) or "None")[:1024], "inline": False},
             ],
@@ -310,8 +300,9 @@ def main() -> int:
         print("Estate-sale scanning is disabled")
         return 0
 
-    radius = int(estate.get("radius_miles", 50))
+    radius = int(estate.get("radius_miles", 25))
     keywords = [str(x).lower() for x in estate.get("keywords", DEFAULT_KEYWORDS)]
+    excluded_terms = [str(x).lower() for x in estate.get("exclude_sports_terms", DEFAULT_EXCLUDED_SPORTS)]
     locations = estate.get("locations", [])
     max_sales = int(estate.get("max_sales_per_search_page", 40))
     delay = float(estate.get("request_delay_seconds", 0.5))
@@ -346,7 +337,7 @@ def main() -> int:
     for url in candidate_urls:
         try:
             checked_sales += 1
-            match = inspect_sale(session, url, keywords, radius)
+            match = inspect_sale(session, url, keywords, excluded_terms, radius)
             if match is None:
                 continue
             matches += 1
