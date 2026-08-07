@@ -29,26 +29,27 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
+# Fallbacks are intentionally specific. Alerts are created only from literal
+# occurrences of configured words/phrases in a listing's visible page text.
 DEFAULT_KEYWORDS = [
-    "pokemon", "pokémon", "pokemon cards", "pokemon tcg", "trading cards", "tcg",
-    "magic the gathering", "mtg", "yu-gi-oh", "yugioh", "one piece card game",
-    "lorcana", "digimon card game", "flesh and blood", "dragon ball super card game",
-    "weiss schwarz", "graded cards", "card collection", "card binder", "booster pack",
-    "booster box", "elite trainer box", "etb", "sealed tcg", "psa", "cgc", "bgs",
+    "pokemon",
+    "pokémon",
+    "pokemon cards",
+    "pokemon tcg",
+    "tcg",
+    "magic the gathering",
+    "mtg",
+    "yu-gi-oh",
+    "yugioh",
+    "one piece card game",
+    "lorcana",
+    "digimon card game",
+    "flesh and blood",
+    "dragon ball super card game",
+    "weiss schwarz",
+    "elite trainer box",
+    "etb",
 ]
-
-DEFAULT_EXCLUDED_SPORTS = [
-    "sports cards", "baseball cards", "basketball cards", "football cards",
-    "hockey cards", "soccer cards", "nascar cards", "panini", "topps",
-    "bowman", "donruss", "upper deck",
-]
-
-GENERIC_TERMS = {
-    "trading cards", "tcg", "graded cards", "card collection", "card binder",
-    "booster pack", "booster box", "psa", "cgc", "bgs",
-}
-
-STRONG_TERMS = set(DEFAULT_KEYWORDS) - GENERIC_TERMS
 
 
 @dataclass
@@ -61,7 +62,6 @@ class SaleMatch:
     dates: str
     keywords: list[str]
     photo_count: int
-    confidence: int
 
 
 def load_json(path: Path, default: Any) -> Any:
@@ -120,23 +120,22 @@ def normalize_text(soup: BeautifulSoup) -> str:
     return re.sub(r"\s+", " ", soup.get_text(" ", strip=True)).strip()
 
 
+def literal_keyword_present(text: str, keyword: str) -> bool:
+    """Match the configured word/phrase literally, not by related meaning."""
+    needle = keyword.strip().lower()
+    if not needle:
+        return False
+    pattern = rf"(?<!\w){re.escape(needle)}(?!\w)"
+    return re.search(pattern, text.lower()) is not None
+
+
 def find_keywords(text: str, keywords: list[str]) -> list[str]:
-    low = text.lower()
     hits: list[str] = []
     for term in keywords:
         needle = str(term).strip().lower()
-        if needle and needle in low and needle not in hits:
+        if needle and literal_keyword_present(text, needle) and needle not in hits:
             hits.append(needle)
     return hits
-
-
-def should_exclude_sports(text: str, hits: list[str], excluded_terms: list[str]) -> bool:
-    low = text.lower()
-    sports_hits = [term for term in excluded_terms if term and term in low]
-    if not sports_hits:
-        return False
-    # Keep mixed sales when a specific non-sports game/franchise is explicitly named.
-    return not any(hit in STRONG_TERMS for hit in hits)
 
 
 def extract_title(soup: BeautifulSoup) -> str:
@@ -184,21 +183,6 @@ def extract_dates(text: str) -> str:
     return "See listing for dates/times"
 
 
-def confidence_score(hits: list[str], text: str, photo_count: int) -> int:
-    if not hits:
-        return 0
-    score = 40
-    strong = sum(1 for hit in hits if hit in STRONG_TERMS)
-    score += min(35, strong * 12)
-    score += min(15, max(0, len(hits) - strong) * 5)
-    if photo_count > 0:
-        score += 5
-    low = text.lower()
-    if "sale description" in low or "about this sale" in low or "items" in low:
-        score += 5
-    return min(score, 100)
-
-
 def photo_count(soup: BeautifulSoup) -> int:
     urls: set[str] = set()
     for image in soup.select("img[src], img[data-src]"):
@@ -218,14 +202,13 @@ def build_search_urls(location: dict[str, Any]) -> list[str]:
     ]
 
 
-def inspect_sale(session: requests.Session, url: str, keywords: list[str], excluded_terms: list[str], radius: int) -> SaleMatch | None:
+def inspect_sale(session: requests.Session, url: str, keywords: list[str], radius: int) -> SaleMatch | None:
     response = fetch(session, url)
     soup = BeautifulSoup(response.text, "html.parser")
     text = normalize_text(soup)
     hits = find_keywords(text, keywords)
-    if not hits or should_exclude_sports(text, hits, excluded_terms):
+    if not hits:
         return None
-    photos = photo_count(soup)
     return SaleMatch(
         title=extract_title(soup),
         url=response.url,
@@ -234,8 +217,7 @@ def inspect_sale(session: requests.Session, url: str, keywords: list[str], exclu
         distance=extract_distance(text, radius),
         dates=extract_dates(text),
         keywords=hits,
-        photo_count=photos,
-        confidence=confidence_score(hits, text, photos),
+        photo_count=photo_count(soup),
     )
 
 
@@ -256,18 +238,17 @@ def send_alert(match: SaleMatch) -> None:
     fields = [
         {"name": "Source", "value": match.source, "inline": True},
         {"name": "Distance", "value": match.distance, "inline": True},
-        {"name": "Confidence", "value": f"{match.confidence}%", "inline": True},
         {"name": "Location", "value": match.location[:1024], "inline": False},
         {"name": "Sale date/time", "value": match.dates[:1024], "inline": False},
-        {"name": "Matched keywords", "value": keywords[:1024], "inline": False},
+        {"name": "Exact keyword(s) found", "value": keywords[:1024], "inline": False},
         {"name": "Photos detected", "value": str(match.photo_count), "inline": True},
     ]
     post_discord({
         "username": "Estate Sale Card Finds",
         "embeds": [{
-            "title": f"TRADING CARD MATCH: {match.title}"[:256],
+            "title": f"TRADING CARD KEYWORD MATCH: {match.title}"[:256],
             "url": match.url,
-            "description": "A nearby estate-sale listing matched your non-sports trading-card watch list.",
+            "description": "This sale contains at least one exact configured trading-card keyword in its page text.",
             "color": 10181046,
             "fields": fields,
         }],
@@ -285,7 +266,7 @@ def send_summary(scanned_pages: int, checked_sales: int, matches: int, errors: l
             "fields": [
                 {"name": "Search pages", "value": str(scanned_pages), "inline": True},
                 {"name": "Sales checked", "value": str(checked_sales), "inline": True},
-                {"name": "Card matches", "value": str(matches), "inline": True},
+                {"name": "Exact keyword matches", "value": str(matches), "inline": True},
                 {"name": "Errors", "value": str(len(errors)), "inline": True},
                 {"name": "Details", "value": ("\n".join(errors[:5]) or "None")[:1024], "inline": False},
             ],
@@ -302,7 +283,6 @@ def main() -> int:
 
     radius = int(estate.get("radius_miles", 25))
     keywords = [str(x).lower() for x in estate.get("keywords", DEFAULT_KEYWORDS)]
-    excluded_terms = [str(x).lower() for x in estate.get("exclude_sports_terms", DEFAULT_EXCLUDED_SPORTS)]
     locations = estate.get("locations", [])
     max_sales = int(estate.get("max_sales_per_search_page", 40))
     delay = float(estate.get("request_delay_seconds", 0.5))
@@ -337,19 +317,18 @@ def main() -> int:
     for url in candidate_urls:
         try:
             checked_sales += 1
-            match = inspect_sale(session, url, keywords, excluded_terms, radius)
+            match = inspect_sale(session, url, keywords, radius)
             if match is None:
                 continue
             matches += 1
             key = state_key(match)
             signature = {
-                "confidence": match.confidence,
                 "keywords": match.keywords,
                 "title": match.title,
             }
             if previous.get(key) != signature:
                 send_alert(match)
-                print(f"MATCH {match.confidence}% | {match.title} | {match.url}")
+                print(f"MATCH {', '.join(match.keywords)} | {match.title} | {match.url}")
             current[key] = signature
         except Exception as exc:
             errors.append(f"{urlparse(url).netloc}: {exc}")
