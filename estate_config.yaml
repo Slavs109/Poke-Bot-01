@@ -12,8 +12,7 @@ estate_sales:
       city: "Dallas"
       state: "TX"
 
-  # Alert ONLY when one of these literal words/phrases appears in the sale title or page text.
-  # Do not infer matches from related words such as "collectibles", "toys", or "memorabilia".
+  # Text alerts require one of these literal words/phrases in the sale page.
   keywords:
     - "pokemon"
     - "pokémon"
@@ -32,3 +31,13 @@ estate_sales:
     - "weiss schwarz"
     - "elite trainer box"
     - "etb"
+
+  # Photo analysis is a second trigger for listings whose text has no keyword hit.
+  # It is intentionally conservative and ignores sports cards and generic collectibles.
+  photo_analysis:
+    enabled: true
+    model: "gpt-5-mini"
+    minimum_confidence: 85
+    max_photos_per_sale: 8
+    photos_per_request: 4
+    max_new_sales_scanned_per_run: 15
