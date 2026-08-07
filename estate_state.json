@@ -18,5 +18,12 @@
     "vision": false,
     "vision_confidence": 0,
     "vision_photo": ""
+  },
+  "b4b95cee6acd68624cab78fd1e5af7e83323ab77acf3a2f54a8fd5e3e4239d13": {
+    "keywords": [],
+    "title": "25% OFF Everything Must Go! Antique Store Closing | Waterford, Baccarat & More",
+    "vision": true,
+    "vision_confidence": 64,
+    "vision_photo": "https://eso-cdn.tlcdn.workers.dev/s-2455326-3c4mzg4xuxtbbey1-t.jpg"
   }
 }
