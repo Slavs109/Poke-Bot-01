@@ -1,10 +1,10 @@
 estate_sales:
   enabled: true
-  radius_miles: 50
+  radius_miles: 25
   max_sales_per_search_page: 50
   request_delay_seconds: 0.5
 
-  # Search both of your existing local ZIP areas.
+  # Search both local ZIP areas.
   locations:
     - zip: "75043"
       city: "Garland"
@@ -13,33 +13,46 @@ estate_sales:
       city: "Dallas"
       state: "TX"
 
+  # Non-sports trading cards only.
   keywords:
     - "pokemon"
     - "pokémon"
     - "pokemon cards"
+    - "pokemon tcg"
     - "trading cards"
     - "tcg"
     - "magic the gathering"
+    - "mtg"
     - "yu-gi-oh"
     - "yugioh"
-    - "sports cards"
-    - "video games"
-    - "video game"
-    - "nintendo"
-    - "playstation"
-    - "xbox"
-    - "gamecube"
-    - "sega"
-    - "game boy"
-    - "gameboy"
-    - "pokemon center"
-    - "console"
-    - "retro games"
-    - "retro gaming"
-    - "vintage toys"
-    - "lego"
-    - "funko"
-    - "sealed games"
+    - "one piece card game"
+    - "lorcana"
+    - "digimon card game"
+    - "flesh and blood"
+    - "dragon ball super card game"
+    - "weiss schwarz"
+    - "graded cards"
+    - "card collection"
+    - "card binder"
+    - "booster pack"
+    - "booster box"
+    - "elite trainer box"
+    - "etb"
+    - "sealed tcg"
     - "psa"
     - "cgc"
     - "bgs"
+
+  exclude_sports_terms:
+    - "sports cards"
+    - "baseball cards"
+    - "basketball cards"
+    - "football cards"
+    - "hockey cards"
+    - "soccer cards"
+    - "nascar cards"
+    - "panini"
+    - "topps"
+    - "bowman"
+    - "donruss"
+    - "upper deck"
