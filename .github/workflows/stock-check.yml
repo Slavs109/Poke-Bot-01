@@ -26,7 +26,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -78,17 +78,16 @@ jobs:
               webhook,
               json={
                   "username": "Estate Sale Card Finds",
-                  "content": "✅ Bot updated: scanning estate sales within 25 miles for exact card keywords AND visually checking listing photos for non-sports trading cards."
+                  "content": "✅ Bot updated: exact trading-card keywords + local YOLO-World photo scanning. No OpenAI API key required."
               },
               timeout=25,
           )
           response.raise_for_status()
           PY
 
-      - name: Check nearby estate sales for text and photo card matches
+      - name: Check nearby estate sales for text and YOLO photo matches
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           CONFIG_PATH: estate_config.yaml
           FORCE_REPORT: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
           PAGE_TIMEOUT_SECONDS: "25"
