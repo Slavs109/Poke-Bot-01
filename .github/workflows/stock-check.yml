@@ -78,14 +78,14 @@ jobs:
               webhook,
               json={
                   "username": "Estate Sale Card Finds",
-                  "content": "✅ Bot updated: scanning estate sales within 25 miles of 75043 and 75217 for non-sports trading cards only."
+                  "content": "✅ Bot updated: scanning estate sales within 25 miles and alerting only when an exact configured trading-card keyword appears in the listing text."
               },
               timeout=25,
           )
           response.raise_for_status()
           PY
 
-      - name: Check nearby estate sales for non-sports trading cards
+      - name: Check nearby estate sales for exact trading-card keywords
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           CONFIG_PATH: estate_config.yaml
