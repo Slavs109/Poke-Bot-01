@@ -33,7 +33,6 @@ estate_sales:
     - "etb"
 
   # Local YOLO-World photo analysis. No API key is required.
-  # Prompts are intentionally specific so generic/sports cards are not a positive class.
   photo_analysis:
     enabled: true
     model: "yolov8s-world.pt"
@@ -58,3 +57,55 @@ estate_sales:
       - "Weiss Schwarz trading card"
       - "graded Pokemon card slab"
       - "graded non-sports trading card slab"
+
+# Extra public sources. These use exact keyword matching and avoid login-only scraping.
+marketplace_sources:
+  enabled: true
+  sources:
+    - name: "OfferUp"
+      enabled: true
+      max_items: 35
+      delay_seconds: 0.4
+      item_url_pattern: "offerup\\.com/item/detail/"
+      search_urls:
+        - "https://offerup.com/explore/sck/tx/dallas/pokemon"
+        - "https://offerup.com/explore/sck/tx/garland/pokemon"
+      exclude_phrases:
+        - "sold"
+        - "buying pokemon"
+        - "cash for pokemon"
+        - "looking to buy"
+
+    - name: "Dallas Craigslist"
+      enabled: true
+      max_items: 40
+      delay_seconds: 0.35
+      item_url_pattern: "dallas\\.craigslist\\.org/.+\\.html"
+      search_urls:
+        - "https://dallas.craigslist.org/search/cba?purveyor=owner&query=pokemon"
+        - "https://dallas.craigslist.org/search/taa?query=pokemon+cards"
+      exclude_phrases:
+        - "cash for pokemon"
+        - "i am actively buying"
+        - "looking to buy"
+        - "want to buy"
+
+    - name: "HiBid"
+      enabled: true
+      max_items: 40
+      delay_seconds: 0.45
+      item_url_pattern: "hibid\\.com/(?:texas/)?lot/|dallas\\.hibid\\.com/lot/"
+      search_urls:
+        - "https://hibid.com/texas/auctions/700074/antiques-and-collectibles/collectibles/trading-cards/pokemon-cards"
+        - "https://dallas.hibid.com/auctions/700074/antiques-and-collectibles/collectibles/trading-cards/pokemon-cards"
+      exclude_phrases: []
+
+    - name: "ShopGoodwill"
+      enabled: true
+      max_items: 40
+      delay_seconds: 0.45
+      item_url_pattern: "shopgoodwill\\.com/item/\\d+"
+      search_urls:
+        - "https://shopgoodwill.com/categories/listing?st=pokemon%20cards&p=1&ps=40"
+        - "https://shopgoodwill.com/categories/listing?st=pokemon%20tcg&p=1&ps=40"
+      exclude_phrases: []
