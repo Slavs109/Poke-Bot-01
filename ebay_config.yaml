@@ -1,32 +1,38 @@
 ebay_deals:
   enabled: true
 
-  # Broad searches for newly listed Buy It Now inventory.
+  # Fast watchlist inspired by commercial deal-alert services.
+  # These are searched newest-first through the official eBay Browse API.
   search_queries:
     - "pokemon card"
-    - "pokemon cards"
     - "pokemon psa"
+    - "pokemon cgc"
     - "pokemon charizard"
     - "pokemon pikachu card"
     - "pokemon vintage card"
+    - "pokemon alt art"
+    - "pokemon illustration rare"
+    - "pokemon special illustration rare"
     - "pokemon booster box"
     - "pokemon elite trainer box"
+    - "pokemon center elite trainer box"
 
-  # Keep the scan focused and cheap enough for frequent GitHub Actions runs.
-  active_results_per_query: 30
-  max_comp_checks_per_run: 24
-  sold_results_to_parse: 30
-  request_delay_seconds: 1.0
+  active_results_per_query: 40
+  max_comp_checks_per_run: 35
+  comparable_results: 70
+  request_delay_seconds: 0.25
 
-  # Comparable sold-listing rules.
-  comp_query_tokens: 9
-  minimum_title_similarity: 0.40
-  minimum_sold_comps: 3
-  minimum_sold_median: 20.00
+  # Comparable listing rules. Graded/raw, card number, and sealed product type
+  # are matched before a listing can be used as a market comp.
+  comp_query_tokens: 8
+  minimum_title_similarity: 0.38
+  minimum_comparable_listings: 5
+  minimum_market_median: 20.00
 
-  # "Really good deal" means at least 40% below recent sold median AND $15+ savings.
-  minimum_discount_fraction: 0.40
-  minimum_absolute_savings: 15.00
+  # Alert only on unusually strong opportunities.
+  # A listing must satisfy all three: discount, dollar savings, and deal score.
+  minimum_discount_fraction: 0.35
+  minimum_absolute_savings: 20.00
+  minimum_deal_score: 65
 
-  # Avoid spending comp requests on extremely expensive listings.
-  maximum_listing_total: 500.00
+  maximum_listing_total: 750.00
