@@ -45,6 +45,10 @@ BAD_TITLE_TERMS = (
 )
 
 
+class SoldSearchUnavailable(RuntimeError):
+    pass
+
+
 @dataclass
 class Listing:
     title: str
@@ -76,6 +80,18 @@ def fetch(session: requests.Session, url: str) -> requests.Response:
     return response
 
 
+def is_signin_or_blocked(response: requests.Response) -> bool:
+    host = urlparse(response.url).netloc.lower()
+    low = response.text[:10000].lower()
+    return (
+        "signin.ebay.com" in host
+        or "sign in to ebay" in low
+        or "security measure" in low
+        or "pardon our interruption" in low
+        or "verify yourself" in low
+    )
+
+
 def money(text: str) -> float | None:
     match = re.search(r"\$\s*([0-9][0-9,]*(?:\.\d{2})?)", text.replace("US", ""), re.I)
     if not match:
@@ -105,7 +121,6 @@ def parse_search_results(html: str, limit: int) -> list[Listing]:
     soup = BeautifulSoup(html, "html.parser")
     found: list[Listing] = []
     seen: set[str] = set()
-
     for item in soup.select("li.s-item"):
         title_el = item.select_one(".s-item__title")
         link_el = item.select_one("a.s-item__link[href]")
@@ -127,21 +142,14 @@ def parse_search_results(html: str, limit: int) -> list[Listing]:
         img_el = item.select_one("img[src]")
         image = str(img_el.get("src", "")) if img_el else ""
         seen.add(url)
-        found.append(Listing(
-            title=title,
-            url=url,
-            price=price,
-            shipping=shipping,
-            image=image,
-            condition=cond_el.get_text(" ", strip=True) if cond_el else "",
-        ))
+        found.append(Listing(title, url, price, shipping, image, cond_el.get_text(" ", strip=True) if cond_el else ""))
         if len(found) >= limit:
             break
     return found
 
 
-def ebay_search_url(query: str, sold: bool = False, buy_it_now: bool = False) -> str:
-    params = [f"_nkw={quote_plus(query)}", "_sop=10", "rt=nc"]
+def ebay_search_url(query: str, sold: bool = False, buy_it_now: bool = False, sort: int = 10) -> str:
+    params = [f"_nkw={quote_plus(query)}", f"_sop={sort}", "rt=nc"]
     if sold:
         params.extend(["LH_Sold=1", "LH_Complete=1"])
     if buy_it_now:
@@ -172,27 +180,48 @@ def normalize_tokens(title: str) -> list[str]:
 
 
 def comp_query(title: str, max_tokens: int = 9) -> str:
-    tokens = normalize_tokens(title)
-    # Keep collector numbers, grading terms, years, set/card names, and the first useful title words.
-    selected = tokens[:max_tokens]
-    return "pokemon " + " ".join(selected)
+    return "pokemon " + " ".join(normalize_tokens(title)[:max_tokens])
 
 
 def similarity_score(a: str, b: str) -> float:
-    ta = set(normalize_tokens(a))
-    tb = set(normalize_tokens(b))
+    ta, tb = set(normalize_tokens(a)), set(normalize_tokens(b))
     if not ta or not tb:
         return 0.0
     return len(ta & tb) / len(ta | tb)
 
 
-def sold_comps(session: requests.Session, listing: Listing, cfg: dict[str, Any]) -> list[Listing]:
-    query = comp_query(listing.title, int(cfg.get("comp_query_tokens", 9)))
-    response = fetch(session, ebay_search_url(query, sold=True))
-    candidates = parse_search_results(response.text, int(cfg.get("sold_results_to_parse", 30)))
+def comparable_candidates(candidates: list[Listing], listing: Listing, cfg: dict[str, Any]) -> list[Listing]:
     min_similarity = float(cfg.get("minimum_title_similarity", 0.40))
-    comps = [x for x in candidates if plausible_pokemon_title(x.title) and similarity_score(listing.title, x.title) >= min_similarity]
-    return comps
+    out = []
+    for x in candidates:
+        if x.url == listing.url:
+            continue
+        if plausible_pokemon_title(x.title) and similarity_score(listing.title, x.title) >= min_similarity:
+            out.append(x)
+    return out
+
+
+def market_comps(session: requests.Session, listing: Listing, cfg: dict[str, Any]) -> tuple[list[Listing], str]:
+    query = comp_query(listing.title, int(cfg.get("comp_query_tokens", 9)))
+    limit = int(cfg.get("sold_results_to_parse", 30))
+
+    # First choice: actual sold listings. As of late July 2026 eBay may redirect
+    # signed-out requests to sign-in. Detect that cleanly instead of treating it
+    # as dozens of per-item errors.
+    sold_response = fetch(session, ebay_search_url(query, sold=True, sort=13))
+    if not is_signin_or_blocked(sold_response):
+        sold = comparable_candidates(parse_search_results(sold_response.text, limit), listing, cfg)
+        if sold:
+            return sold, "recent sold"
+
+    # Credential-free fallback: compare against current Buy It Now listings for
+    # the same specific card/product. This is weaker than sold data, so the deal
+    # threshold is intentionally stricter in main().
+    live_response = fetch(session, ebay_search_url(query, buy_it_now=True, sort=15))
+    if is_signin_or_blocked(live_response):
+        raise SoldSearchUnavailable("eBay blocked both sold and live comparable searches")
+    live = comparable_candidates(parse_search_results(live_response.text, limit), listing, cfg)
+    return live, "current comparable"
 
 
 def robust_median(values: list[float]) -> float | None:
@@ -214,26 +243,26 @@ def post_discord(payload: dict[str, Any]) -> None:
     if not WEBHOOK_URL:
         print("DISCORD_WEBHOOK_URL missing; skipping alert", file=sys.stderr)
         return
-    response = requests.post(WEBHOOK_URL, json=payload, timeout=TIMEOUT)
-    response.raise_for_status()
+    requests.post(WEBHOOK_URL, json=payload, timeout=TIMEOUT).raise_for_status()
 
 
-def send_deal(listing: Listing, median: float, comps: int, discount: float, query: str) -> None:
+def send_deal(listing: Listing, median: float, comps: int, discount: float, query: str, basis: str) -> None:
     savings = median - listing.total
     fields = [
         {"name": "Price", "value": f"${listing.price:.2f}", "inline": True},
         {"name": "Shipping", "value": f"${listing.shipping:.2f}", "inline": True},
         {"name": "Total", "value": f"${listing.total:.2f}", "inline": True},
-        {"name": "Recent sold median", "value": f"${median:.2f}", "inline": True},
-        {"name": "Below sold median", "value": f"{discount:.0%}", "inline": True},
+        {"name": f"{basis.title()} median", "value": f"${median:.2f}", "inline": True},
+        {"name": "Below market median", "value": f"{discount:.0%}", "inline": True},
         {"name": "Potential savings", "value": f"${savings:.2f}", "inline": True},
-        {"name": "Comparable sold listings", "value": str(comps), "inline": True},
+        {"name": "Comparable listings", "value": str(comps), "inline": True},
+        {"name": "Pricing basis", "value": basis, "inline": True},
         {"name": "Comp search", "value": query[:1024], "inline": False},
     ]
     embed: dict[str, Any] = {
         "title": f"🔥 REALLY GOOD EBAY DEAL: {listing.title}"[:256],
         "url": listing.url,
-        "description": "Active eBay listing priced far below the median of similar recently sold listings. Verify condition/photos before buying.",
+        "description": "Price is far below comparable eBay listings. Verify card identity, condition and seller before buying.",
         "color": 5763719,
         "fields": fields,
     }
@@ -242,7 +271,7 @@ def send_deal(listing: Listing, median: float, comps: int, discount: float, quer
     post_discord({"username": "Pokémon eBay Deal Hunter", "embeds": [embed]})
 
 
-def send_summary(scanned: int, comp_checked: int, deals: int, errors: list[str]) -> None:
+def send_summary(scanned: int, comp_checked: int, deals: int, fallback_count: int, errors: list[str]) -> None:
     if not FORCE_REPORT:
         return
     post_discord({
@@ -254,6 +283,7 @@ def send_summary(scanned: int, comp_checked: int, deals: int, errors: list[str])
                 {"name": "Active listings scanned", "value": str(scanned), "inline": True},
                 {"name": "Listings comped", "value": str(comp_checked), "inline": True},
                 {"name": "Strong deals", "value": str(deals), "inline": True},
+                {"name": "Live-comp fallbacks", "value": str(fallback_count), "inline": True},
                 {"name": "Errors", "value": str(len(errors)), "inline": True},
                 {"name": "Details", "value": ("\n".join(errors[:5]) or "None")[:1024], "inline": False},
             ],
@@ -273,7 +303,8 @@ def main() -> int:
     max_comp_checks = int(cfg.get("max_comp_checks_per_run", 20))
     min_comps = int(cfg.get("minimum_sold_comps", 3))
     min_median = float(cfg.get("minimum_sold_median", 20.0))
-    min_discount = float(cfg.get("minimum_discount_fraction", 0.40))
+    sold_discount = float(cfg.get("minimum_discount_fraction", 0.40))
+    live_discount = float(cfg.get("minimum_live_comp_discount_fraction", 0.50))
     min_savings = float(cfg.get("minimum_absolute_savings", 15.0))
     max_total = float(cfg.get("maximum_listing_total", 500.0))
     delay = float(cfg.get("request_delay_seconds", 1.0))
@@ -288,8 +319,14 @@ def main() -> int:
     seen_urls: set[str] = set()
     for query in queries:
         try:
-            response = fetch(session, ebay_search_url(query, sold=False, buy_it_now=True))
-            for listing in parse_search_results(response.text, max_per_query):
+            response = fetch(session, ebay_search_url(query, buy_it_now=True, sort=10))
+            if is_signin_or_blocked(response):
+                errors.append(f"active search '{query}': eBay blocked/redirected search")
+                continue
+            parsed = parse_search_results(response.text, max_per_query)
+            if not parsed:
+                errors.append(f"active search '{query}': no listing cards parsed (page layout/block may have changed)")
+            for listing in parsed:
                 if listing.url in seen_urls or not plausible_pokemon_title(listing.title):
                     continue
                 if listing.total <= 0 or listing.total > max_total:
@@ -300,43 +337,48 @@ def main() -> int:
             errors.append(f"active search '{query}': {exc}")
         time.sleep(delay)
 
-    # Cheapest newly listed items first; this spends comp lookups where bargains are most likely.
     active.sort(key=lambda x: x.total)
-    comp_checked = deals = 0
+    comp_checked = deals = fallback_count = 0
 
     for listing in active:
         if comp_checked >= max_comp_checks:
             break
         key = listing_key(listing.url)
         try:
-            comps = sold_comps(session, listing, cfg)
+            comps, basis = market_comps(session, listing, cfg)
             comp_checked += 1
+            if basis == "current comparable":
+                fallback_count += 1
             totals = [x.total for x in comps]
             median = robust_median(totals)
             if median is None or len(totals) < min_comps or median < min_median:
                 continue
             discount = 1.0 - (listing.total / median)
             savings = median - listing.total
-            qualifies = discount >= min_discount and savings >= min_savings
+            required_discount = live_discount if basis == "current comparable" else sold_discount
+            qualifies = discount >= required_discount and savings >= min_savings
             signature = {
                 "total": round(listing.total, 2),
                 "median": round(median, 2),
                 "comps": len(totals),
                 "discount": round(discount, 4),
+                "basis": basis,
             }
             if qualifies:
                 deals += 1
                 if previous.get(key) != signature:
-                    send_deal(listing, median, len(totals), discount, comp_query(listing.title, int(cfg.get("comp_query_tokens", 9))))
-                    print(f"DEAL {discount:.0%} below median | ${listing.total:.2f} vs ${median:.2f} | {listing.title}")
+                    send_deal(listing, median, len(totals), discount, comp_query(listing.title, int(cfg.get("comp_query_tokens", 9))), basis)
+                    print(f"DEAL {discount:.0%} below {basis} median | ${listing.total:.2f} vs ${median:.2f} | {listing.title}")
             current[key] = signature
+        except SoldSearchUnavailable as exc:
+            errors.append(f"comp '{listing.title[:45]}': {exc}")
         except Exception as exc:
-            errors.append(f"comp '{listing.title[:50]}': {exc}")
+            errors.append(f"comp '{listing.title[:45]}': {exc}")
         time.sleep(delay)
 
     save_json(STATE_PATH, current)
-    send_summary(len(active), comp_checked, deals, errors)
-    print(f"eBay scan: active={len(active)} comped={comp_checked} deals={deals} errors={len(errors)}")
+    send_summary(len(active), comp_checked, deals, fallback_count, errors)
+    print(f"eBay scan: active={len(active)} comped={comp_checked} deals={deals} fallbacks={fallback_count} errors={len(errors)}")
     return 0
 
 
