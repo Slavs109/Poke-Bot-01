@@ -47,7 +47,7 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -63,38 +63,22 @@ jobs:
       - name: Install requirements
         run: python -m pip install -r requirements.txt
 
-      - name: Send live confirmation
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+      - name: Scan eBay API for unusually cheap Pokemon listings
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: |
-          python - <<'PY'
-          import os, requests
-          webhook = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
-          if webhook:
-              requests.post(
-                  webhook,
-                  json={
-                      "username": "Pokémon eBay Deal Hunter",
-                      "content": "✅ eBay deal hunter updated: scanning new Pokémon listings and alerting only on aggressive discounts versus comparable sold listings."
-                  },
-                  timeout=25,
-              ).raise_for_status()
-          PY
-
-      - name: Scan eBay for unusually cheap Pokemon cards
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
           CONFIG_PATH: ebay_config.yaml
           FORCE_REPORT: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
           PAGE_TIMEOUT_SECONDS: "25"
         run: python ebay_deals.py
 
       - name: Save eBay alert state
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add ebay_state.json
+          git add ebay_state.json 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No state change"
           else
