@@ -1,4 +1,30 @@
 {
+  "09cdd29193d479ab91e668a26163fbaca3d4732a9294bd4d64342fb143472cf3": {
+    "confidence": 74,
+    "labels": [
+      "Pokemon card binder page"
+    ],
+    "matched": true,
+    "photo_url": "https://eso-cdn.tlcdn.workers.dev/s-2454809-k9916bfsqigktkam-t.webp",
+    "photos_signature": "8891461ca84f4b34daed04d31099c412a6e61436bf01fc8335b822d051c7abb1",
+    "reason": "YOLO-World detected Pokemon card binder page"
+  },
+  "0f0298f346e7fceb5f24dd82f3e8bb6bd480146768fdea4c1dab8f303d1f262a": {
+    "confidence": 0,
+    "labels": [],
+    "matched": false,
+    "photo_url": "",
+    "photos_signature": "f2f1eb0280a559dba1fba97733c817dcc87a3bd57d78d886d28104c832a1548b",
+    "reason": ""
+  },
+  "1848e2a8fe1154b9226aa2128cae014b4dc1d4ba6c15fd06178a965d878c201e": {
+    "confidence": 0,
+    "labels": [],
+    "matched": false,
+    "photo_url": "",
+    "photos_signature": "4e76a5e5a2d7207af99738855c61ea4caa2b2d07da42962071e64fa9a7d007f6",
+    "reason": ""
+  },
   "1faf1cd48faaf82e5d7ffec5b4b56cd625d520f414de6e68ec9733666efa90ef": {
     "confidence": 0,
     "labels": [],
@@ -23,12 +49,28 @@
     "photos_signature": "64f71d5bdcaf776a60e1a38213935166745887f173a6eeed6d99ccec0189c034",
     "reason": ""
   },
+  "464d4d3df4d175f1dcfd446914875be59a953772ed8c50c75ec75ff689ece85b": {
+    "confidence": 0,
+    "labels": [],
+    "matched": false,
+    "photo_url": "",
+    "photos_signature": "93ad64da6fb6e2c01e1ff1a822df78377f3816cc91eb069c5265638d9cd58595",
+    "reason": ""
+  },
   "639ad9a761a428a0dbfafbe9e58a872262d3fb89b54d129603e5df7c92eae752": {
     "confidence": 0,
     "labels": [],
     "matched": false,
     "photo_url": "",
     "photos_signature": "ca596e4cb183d95ca02573412ffb118d8c0b9d8cf0303ad66b0944e9b64c94dc",
+    "reason": ""
+  },
+  "72fd41b033012c896c82a6055b1747528b11eb28b1868b131eaa0d10cefcf192": {
+    "confidence": 0,
+    "labels": [],
+    "matched": false,
+    "photo_url": "",
+    "photos_signature": "f72e64bbdf8a728f73d2afed3cb1202fc72a4c6c055cd77e5d4ebad861f2a84d",
     "reason": ""
   },
   "74a71f0542be8048f84ebbe26b8ab48f9695e150614365757084e5b48548e6f5": {
@@ -55,6 +97,14 @@
     "photos_signature": "be5bdaa477de5db1dc87f8c7aa55f5b3d5f780f7870d35007be415249670246f",
     "reason": ""
   },
+  "859300ef61e5a9cc30a615cd57cbae7023b27840c977318e3ea0e15cd95833e9": {
+    "confidence": 0,
+    "labels": [],
+    "matched": false,
+    "photo_url": "",
+    "photos_signature": "1d5a2595857639dfc6444f39bc9f23811f21e4c4adea3a57ed20d8684dd002a7",
+    "reason": ""
+  },
   "8686e7d57f20b0ff7962777d5c9d69353f0c966593aa3f1f3e411ccc0ea67006": {
     "confidence": 0,
     "labels": [],
@@ -69,6 +119,14 @@
     "matched": false,
     "photo_url": "",
     "photos_signature": "6844947c548b0a27857a8c90465478c57796280009447b11b7602e5ffe755631",
+    "reason": ""
+  },
+  "a76e730c1f9673c6f32957e40989c0e3647a54eefe55a805c2e92c30ea0f1166": {
+    "confidence": 0,
+    "labels": [],
+    "matched": false,
+    "photo_url": "",
+    "photos_signature": "6e1de772fa15b61c1f9a9371d668da653ea598cb38fe0bc49fb2408ff446d38f",
     "reason": ""
   },
   "acb637b51e00ba6ce51a57999a66cdb027c07f18be33e19f6a164a665c67fb47": {
@@ -105,6 +163,14 @@
     "photos_signature": "623a0f8674e8f925efee42ff3141b1d3945797737217661c11b96ba4028e5991",
     "reason": ""
   },
+  "ce649184331ef2238febc8a4b0b7b1e4f349a482b8cc26188a528eaa538dd2ac": {
+    "confidence": 0,
+    "labels": [],
+    "matched": false,
+    "photo_url": "",
+    "photos_signature": "68a1b819b79d26004fc3c96fca1ff629f9b2c0e5116cdb3c7c8de0229c74dc94",
+    "reason": ""
+  },
   "f0224aca574738c05fdc60fa1757cb998962c66aa257b52c9b28326296dc46ba": {
     "confidence": 0,
     "labels": [],
@@ -119,6 +185,14 @@
     "matched": false,
     "photo_url": "",
     "photos_signature": "054b29666b0978cec8e04909db71604b6e513733c3998ba1cb613ddfc4534d45",
+    "reason": ""
+  },
+  "fa60d55499ec2541bde4515719aab073e10f86f9e954c0fadd24ded7332df9fa": {
+    "confidence": 0,
+    "labels": [],
+    "matched": false,
+    "photo_url": "",
+    "photos_signature": "be5bdaa477de5db1dc87f8c7aa55f5b3d5f780f7870d35007be415249670246f",
     "reason": ""
   }
 }
