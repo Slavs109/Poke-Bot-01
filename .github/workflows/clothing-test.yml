@@ -1,0 +1,35 @@
+name: Clothing scanner test
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - clothing_deals.py
+      - .github/workflows/clothing-test.yml
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test filtering and live feeds
+        run: |
+          python - <<'PY'
+          import clothing_deals as c
+          from unittest.mock import patch
+          from io import BytesIO
+          entries = [('Men shoes 50% off','a'),('Men jeans 75% off','b'),('Men shirt 49% off','c'),('Women shoes 80% off','d'),('Men boots sold out 90% off','e')]
+          xml = '<feed xmlns="http://www.w3.org/2005/Atom">' + ''.join(f'<entry><title>{t}</title><link href="https://example.com/{u}"/></entry>' for t,u in entries) + '</feed>'
+          with patch.object(c.urllib.request,'urlopen',side_effect=lambda *a,**k: BytesIO(xml.encode())), patch.object(c.time,'sleep'):
+              result=c.scan()
+          assert not result['errors'], result
+          assert [d['discount'] for d in result['deals']]==[75,50], result
+          print('Mock filtering passed')
+          result=c.scan()
+          import json
+          print(json.dumps(result,indent=2))
+          assert len(result['errors']) < len(c.SUBREDDITS), 'All live feeds failed'
+          PY
