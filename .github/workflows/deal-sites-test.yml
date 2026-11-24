@@ -1,0 +1,31 @@
+name: Deal sites live test
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - deal_sites.py
+      - .github/workflows/deal-sites-test.yml
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test parser
+        run: |
+          python - <<'PY'
+          from deal_sites import parse
+          xml = b'<rss><channel><item><title>Men shoes 60% off</title><link>https://example.com/a</link></item><item><title>Women shoes 80% off</title><link>https://example.com/b</link></item><item><title>Men jeans 40% off</title><link>https://example.com/c</link></item></channel></rss>'
+          assert len(list(parse(xml, 'test')))==1
+          PY
+      - name: Live scan
+        run: python deal_sites.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deal-results
+          path: deal_sites_results.json
