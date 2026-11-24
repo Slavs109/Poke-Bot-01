@@ -1,0 +1,3 @@
+plugins { id 'com.android.application' }
+android { namespace 'com.dealhunter.app'; compileSdk 35; defaultConfig { applicationId 'com.dealhunter.app'; minSdk 26; targetSdk 35; versionCode 1; versionName '1.0' } }
+dependencies { implementation 'androidx.work:work-runtime:2.10.0' }
