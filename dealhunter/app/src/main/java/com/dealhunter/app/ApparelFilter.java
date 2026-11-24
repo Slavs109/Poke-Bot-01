@@ -10,6 +10,8 @@ final class ApparelFilter {
  if(best==0){m=Pattern.compile("(?<!\\d)(\\d{1,2}|100)\\s*%\\s*(?:off|discount|savings)").matcher(d);if(m.find())best=Integer.parseInt(m.group(1));}
  Matcher pair=Pattern.compile("\\$([0-9]+(?:\\.[0-9]{2})?)\\s*(?:\\(|,|;|[-–])?\\s*(?:was|reg(?:ular)?\\.?|originally|list price|msrp)\\s*[: ]*\\$([0-9]+(?:\\.[0-9]{2})?)").matcher(all);
  if(pair.find()){double sale=Double.parseDouble(pair.group(1)),regular=Double.parseDouble(pair.group(2));if(regular>sale&&sale>=0)best=Math.max(best,(int)Math.floor(100*(regular-sale)/regular));}
+ Matcher stack=Pattern.compile("(?<!\\d)(\\d{1,2})\\s*%\\s*off\\s*\\+\\s*extra\\s*(\\d{1,2})\\s*%\\s*off").matcher(t);
+ if(stack.find()){int first=Integer.parseInt(stack.group(1)),extra=Integer.parseInt(stack.group(2));best=Math.max(best,(int)Math.floor(100-(100-first)*(100-extra)/100.0));}
  return best;
  }
 }
